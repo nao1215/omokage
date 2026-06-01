@@ -22,6 +22,8 @@ type Metrics struct {
 	KatakanaRatio            float64
 	ParagraphLengthVariance  float64
 	MarkdownStructureDensity float64
+	PoliteEndingRatio        float64
+	PlainEndingRatio         float64
 	SentenceCount            int
 	CharacterCount           int
 }
@@ -122,6 +124,8 @@ func Aggregate(perDoc []Metrics) Distribution {
 		dist.Mean.KatakanaRatio += m.KatakanaRatio
 		dist.Mean.ParagraphLengthVariance += m.ParagraphLengthVariance
 		dist.Mean.MarkdownStructureDensity += m.MarkdownStructureDensity
+		dist.Mean.PoliteEndingRatio += m.PoliteEndingRatio
+		dist.Mean.PlainEndingRatio += m.PlainEndingRatio
 		dist.SentenceCount += m.SentenceCount
 		dist.CharacterCount += m.CharacterCount
 	}
@@ -138,6 +142,8 @@ func Aggregate(perDoc []Metrics) Distribution {
 	dist.Mean.KatakanaRatio /= n
 	dist.Mean.ParagraphLengthVariance /= n
 	dist.Mean.MarkdownStructureDensity /= n
+	dist.Mean.PoliteEndingRatio /= n
+	dist.Mean.PlainEndingRatio /= n
 
 	for _, m := range perDoc {
 		accumulateSquaredError(&dist.StdDev, m, dist.Mean)
@@ -158,6 +164,8 @@ func accumulateSquaredError(acc *Metrics, sample Metrics, mean Metrics) {
 	acc.KatakanaRatio += square(sample.KatakanaRatio - mean.KatakanaRatio)
 	acc.ParagraphLengthVariance += square(sample.ParagraphLengthVariance - mean.ParagraphLengthVariance)
 	acc.MarkdownStructureDensity += square(sample.MarkdownStructureDensity - mean.MarkdownStructureDensity)
+	acc.PoliteEndingRatio += square(sample.PoliteEndingRatio - mean.PoliteEndingRatio)
+	acc.PlainEndingRatio += square(sample.PlainEndingRatio - mean.PlainEndingRatio)
 }
 
 func finalizeStdDev(acc *Metrics, n float64) {
@@ -172,6 +180,8 @@ func finalizeStdDev(acc *Metrics, n float64) {
 	acc.KatakanaRatio = math.Sqrt(acc.KatakanaRatio / n)
 	acc.ParagraphLengthVariance = math.Sqrt(acc.ParagraphLengthVariance / n)
 	acc.MarkdownStructureDensity = math.Sqrt(acc.MarkdownStructureDensity / n)
+	acc.PoliteEndingRatio = math.Sqrt(acc.PoliteEndingRatio / n)
+	acc.PlainEndingRatio = math.Sqrt(acc.PlainEndingRatio / n)
 }
 
 func square(value float64) float64 {
@@ -220,6 +230,11 @@ func ExtractText(text string) Metrics {
 	conjunctionCount, tokenCount := conjunctionStats(normalized)
 	kanjiCount, hiraganaCount, katakanaCount := scriptCounts(normalized)
 	scriptTotal := max(kanjiCount+hiraganaCount+katakanaCount, 1)
+	politeCount, plainCount := sentenceEndingStats(normalized)
+	// Normalize sentence-ending forms by Japanese terminators (。！？) rather than
+	// len(sentences): the latter also splits on Latin "." and would over-count
+	// sentences in technical prose (version numbers, decimals), diluting the ratio.
+	japaneseSentences := max(strings.Count(normalized, "。")+strings.Count(normalized, "！")+strings.Count(normalized, "？"), 1)
 
 	return Metrics{
 		AverageSentenceLength:    mean(sentenceLengths),
@@ -233,6 +248,8 @@ func ExtractText(text string) Metrics {
 		KatakanaRatio:            ratio(katakanaCount, scriptTotal),
 		ParagraphLengthVariance:  variance(paragraphLengths),
 		MarkdownStructureDensity: ratio(structureLines, max(nonEmptyLines, 1)),
+		PoliteEndingRatio:        ratio(politeCount, japaneseSentences),
+		PlainEndingRatio:         ratio(plainCount, japaneseSentences),
 		SentenceCount:            len(sentences),
 		CharacterCount:           characterCount,
 	}
@@ -329,6 +346,23 @@ func splitWords(text string) []string {
 	return strings.FieldsFunc(text, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	})
+}
+
+// sentenceEndingStats counts Japanese sentence-ending forms. The contrast
+// between the polite register (敬体: です・ます) and the plain register
+// (常体: だ・である) is one of the strongest stylistic markers in Japanese
+// writing, and a sharp shift between the two is exactly the kind of drift dyer
+// aims to surface.
+func sentenceEndingStats(text string) (polite int, plain int) {
+	politeForms := []string{"ます", "です", "ました", "でした", "ません"}
+	plainForms := []string{"である", "だった", "だが"}
+	for _, form := range politeForms {
+		polite += strings.Count(text, form)
+	}
+	for _, form := range plainForms {
+		plain += strings.Count(text, form)
+	}
+	return polite, plain
 }
 
 func scriptCounts(text string) (kanji int, hiragana int, katakana int) {

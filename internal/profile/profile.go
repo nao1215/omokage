@@ -55,6 +55,8 @@ var featureSpecs = []featureSpec{
 	{"katakana ratio", func(f config.Features) bool { return f.KatakanaRatio }, func(m feature.Metrics) float64 { return m.KatakanaRatio }, true},
 	{"paragraph length variance", func(f config.Features) bool { return f.ParagraphLengthVariance }, func(m feature.Metrics) float64 { return m.ParagraphLengthVariance }, false},
 	{"markdown structure frequency", func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true},
+	{"polite sentence-ending ratio", func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true},
+	{"plain sentence-ending ratio", func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true},
 }
 
 // Score measures how closely a target document matches a learned author
@@ -78,6 +80,15 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 		mean := spec.value(reference.Mean)
 		std := spec.value(reference.StdDev)
 		observed := spec.value(target)
+		// A feature the author never exhibits (mean and spread both zero) carries
+		// no stylistic signal when the target also lacks it — e.g. the Japanese
+		// script and sentence-ending features are identically zero for an English
+		// corpus. Counting them as a perfect match would inflate every score, so
+		// they are dropped. A target that *does* exhibit the feature still counts
+		// as drift via the floor below.
+		if mean == 0 && std == 0 && observed == 0 {
+			continue
+		}
 		z := math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio)
 		totalZ += z
 		results = append(results, scored{

@@ -25,6 +25,26 @@ func TestExtractText(t *testing.T) {
 	}
 }
 
+func TestExtractTextDetectsSentenceEndings(t *testing.T) {
+	t.Parallel()
+
+	polite := ExtractText("今日は晴れです。散歩に行きます。とても良い一日でした。")
+	if polite.PoliteEndingRatio <= polite.PlainEndingRatio {
+		t.Fatalf("expected polite register to dominate, got polite=%f plain=%f", polite.PoliteEndingRatio, polite.PlainEndingRatio)
+	}
+
+	plain := ExtractText("今日は晴れである。散歩に行く。とても良い一日だった。")
+	if plain.PlainEndingRatio <= plain.PoliteEndingRatio {
+		t.Fatalf("expected plain register to dominate, got polite=%f plain=%f", plain.PoliteEndingRatio, plain.PlainEndingRatio)
+	}
+
+	// English text has no Japanese sentence-ending forms.
+	english := ExtractText("This is a plain English sentence. It has no Japanese endings.")
+	if english.PoliteEndingRatio != 0 || english.PlainEndingRatio != 0 {
+		t.Fatalf("expected zero ending ratios for English, got polite=%f plain=%f", english.PoliteEndingRatio, english.PlainEndingRatio)
+	}
+}
+
 func TestCollectFilesFiltersSupportedExtensions(t *testing.T) {
 	t.Parallel()
 

@@ -120,6 +120,73 @@ func TestScoreWithNoEnabledFeatures(t *testing.T) {
 	}
 }
 
+func TestScoreSkipsDegenerateFeatures(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+
+	// Simulate an English profile: the Japanese-only features (kanji/hiragana/
+	// katakana ratios and sentence-ending ratios) are identically zero, while the
+	// language-agnostic features carry real values.
+	dist := feature.Distribution{
+		Mean: feature.Metrics{
+			AverageSentenceLength:    18,
+			PunctuationFrequency:     0.12,
+			BulletRatio:              0.2,
+			MarkdownStructureDensity: 0.3,
+		},
+		StdDev: feature.Metrics{
+			AverageSentenceLength:    3,
+			PunctuationFrequency:     0.02,
+			BulletRatio:              0.05,
+			MarkdownStructureDensity: 0.06,
+		},
+		DocumentCount: 50,
+	}
+
+	// A target that matches the live features but also has zero Japanese features
+	// must score 100: the dead features must not be counted as perfect matches
+	// that pull the score around. (Without the skip, they would still read as
+	// matches, but they would dominate the average and mask real drift.)
+	onProfile := Score(dist, dist.Mean, flags)
+	if onProfile.Similarity != 100 {
+		t.Fatalf("expected 100%% for a matching English target, got %d", onProfile.Similarity)
+	}
+
+	// Drift in a live feature must still be detected despite the dead features.
+	target := dist.Mean
+	target.BulletRatio = 0.9
+	drifted := Score(dist, target, flags)
+	if drifted.Similarity >= onProfile.Similarity {
+		t.Fatalf("expected bullet drift to lower similarity, got %d", drifted.Similarity)
+	}
+	if !strings.Contains(drifted.Differences[0], "bullet") {
+		t.Fatalf("expected bullet drift to be reported, got %q", drifted.Differences[0])
+	}
+}
+
+func TestScoreFlagsDegenerateFeatureWhenTargetHasIt(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+
+	// An author who never uses bullet lists (mean and std both zero).
+	dist := feature.Distribution{
+		Mean:          feature.Metrics{AverageSentenceLength: 20},
+		StdDev:        feature.Metrics{AverageSentenceLength: 4},
+		DocumentCount: 30,
+	}
+
+	// A target that suddenly uses many bullets is genuine drift and must be
+	// penalized, not skipped.
+	target := dist.Mean
+	target.BulletRatio = 0.6
+	drifted := Score(dist, target, flags)
+	if drifted.Similarity >= 100 {
+		t.Fatalf("expected drift from a never-used feature to lower similarity, got %d", drifted.Similarity)
+	}
+}
+
 func TestScoreSurvivesZeroStdDev(t *testing.T) {
 	t.Parallel()
 

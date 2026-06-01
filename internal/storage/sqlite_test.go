@@ -31,6 +31,8 @@ func TestSaveLoadProfile(t *testing.T) {
 				KatakanaRatio:            0.2,
 				ParagraphLengthVariance:  7,
 				MarkdownStructureDensity: 0.15,
+				PoliteEndingRatio:        0.82,
+				PlainEndingRatio:         0.04,
 			},
 			StdDev: feature.Metrics{
 				AverageSentenceLength:    2.5,
@@ -44,6 +46,8 @@ func TestSaveLoadProfile(t *testing.T) {
 				KatakanaRatio:            0.03,
 				ParagraphLengthVariance:  2.0,
 				MarkdownStructureDensity: 0.05,
+				PoliteEndingRatio:        0.12,
+				PlainEndingRatio:         0.03,
 			},
 			DocumentCount:  3,
 			SentenceCount:  8,
@@ -74,6 +78,12 @@ func TestSaveLoadProfile(t *testing.T) {
 	}
 	if actual.Distribution.StdDev.KanjiRatio != expected.Distribution.StdDev.KanjiRatio {
 		t.Fatalf("std kanji ratio mismatch: got=%f want=%f", actual.Distribution.StdDev.KanjiRatio, expected.Distribution.StdDev.KanjiRatio)
+	}
+	if actual.Distribution.Mean.PoliteEndingRatio != expected.Distribution.Mean.PoliteEndingRatio {
+		t.Fatalf("mean polite ending ratio mismatch: got=%f want=%f", actual.Distribution.Mean.PoliteEndingRatio, expected.Distribution.Mean.PoliteEndingRatio)
+	}
+	if actual.Distribution.StdDev.PlainEndingRatio != expected.Distribution.StdDev.PlainEndingRatio {
+		t.Fatalf("std plain ending ratio mismatch: got=%f want=%f", actual.Distribution.StdDev.PlainEndingRatio, expected.Distribution.StdDev.PlainEndingRatio)
 	}
 	if !actual.TrainedAt.Equal(expected.TrainedAt) {
 		t.Fatalf("trained_at mismatch: got=%s want=%s", actual.TrainedAt, expected.TrainedAt)

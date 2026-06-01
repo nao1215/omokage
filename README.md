@@ -90,6 +90,8 @@ katakana_ratio = true
 conjunction_frequency = true
 paragraph_length_variance = true
 markdown_structure_frequency = true
+polite_ending_ratio = true
+plain_ending_ratio = true
 
 [storage]
 profile_dir = "./profiles"
@@ -107,6 +109,17 @@ cache_dir = "./cache"
 - kanji / hiragana / katakana ratio
 - paragraph length variance
 - markdown structure frequency
+- polite / plain sentence-ending ratio (敬体 / 常体)
+
+## How similarity is scored
+
+`dyer check` standardizes each feature against the author's own per-document
+spread — the mean and standard deviation learned during training — and reports
+how many standard deviations the target sits away (a Burrows's-Delta-style
+z-score). A document is judged by how far it strays from the author's natural
+variation rather than from a single averaged value. Features that an author
+never exhibits (for example, the Japanese-specific features on an English
+corpus) are skipped automatically so they neither inflate nor distort the score.
 
 ## Development
 
