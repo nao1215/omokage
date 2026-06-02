@@ -42,3 +42,31 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected profile dir: %q", actual.Storage.ProfileDir)
 	}
 }
+
+func TestDefaultAuthorRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "omokage.toml")
+	cfg := Default("writing-lab")
+	cfg.Defaults.Author = "me"
+	if err := Save(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual.Defaults.Author != "me" {
+		t.Fatalf("default author not preserved: got %q", actual.Defaults.Author)
+	}
+
+	// A config without a [defaults] section parses to an empty default author,
+	// preserving backward compatibility with files written before the field.
+	legacy, err := Parse([]byte("[project]\nname = \"x\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Defaults.Author != "" {
+		t.Fatalf("legacy config should have no default author, got %q", legacy.Defaults.Author)
+	}
+}
