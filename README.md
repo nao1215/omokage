@@ -14,9 +14,7 @@ omokage learns how you write from your past writing, then tells you how close a 
 
 ## About the name
 
-omokage (面影) is a Japanese word. It is written with 面 (face) and 影 (shadow, trace), and it means the remembered image of someone or something, the likeness that comes back to mind.
-
-The name also comes from Omokage, a yokan (red-bean jelly) made by Toraya that I like (https://www.toraya-group.co.jp/products/collections/yokan-omokage). That was part of why I picked it.
+omokage (面影) is a Japanese word. It is written with 面 (face) and 影 (shadow, trace), and it means the remembered image of someone or something, the likeness that comes back to mind. I took the name from [Omokage](https://www.toraya-group.co.jp/products/collections/yokan-omokage), a yokan (red-bean jelly) made by Toraya that I like.
 
 ## Why I built it
 
@@ -89,6 +87,24 @@ Differences:
 ```
 
 Similarity runs from 0 to 100 and shows how close the text sits to the learned style. Differences lists the features that moved the most, such as the sentence-ending register (敬体 / 常体), the balance of kanji and kana, function-word and character n-gram usage, sentence length, and layout. omokage compares style rather than topic, so writing about something new in your usual voice still scores high.
+
+## How it scores
+
+When you train an author, omokage reads every file, measures a set of stylistic features for each document, and stores their mean and spread in a SQLite database under `profiles/` (one database per author). The text itself is not kept, only the numbers.
+
+The features fall into a few groups:
+
+- Register: how often sentences end in the polite form (敬体) or the plain form (常体).
+- Script balance: the ratio of kanji, hiragana, and katakana.
+- Function words: the frequency of common particles and English function words (の, は, に, the, of, and, …).
+- Character n-grams: the most frequent two- and three-character sequences.
+- Shape: sentence length and its variation, punctuation and newline frequency, bullet and Markdown usage, paragraph length variation.
+
+A check measures the same features on the draft and compares each one to how much it normally varies across your own writing, as a z-score in the spirit of Burrows's Delta. A feature that stays within your usual range costs nothing; one that strays far lowers the score. The function-word and n-gram fingerprint carries most of the signal, a clear register shift is penalized on top of that, and the shape features only nudge the result. Code blocks are removed before the features are measured, so the score reflects prose rather than code. `diff` uses the same features to compare two documents directly, without a stored profile.
+
+## Limits
+
+omokage looks at style, not meaning. It cannot tell whether a draft is correct, original, or well written, only whether it resembles the voice it was trained on. It needs a reasonable amount of training text: with a few short documents the measured spread is wide and the scores are noisy. It separates Japanese authors more sharply than English ones, and two people who write in the same register will look more alike than they really are. It is not an AI-text detector; the score is similarity to a voice you trained, nothing more.
 
 ## License
 
