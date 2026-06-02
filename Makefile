@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e lint clean tools help
+.PHONY: build test test-e2e bench lint clean tools help
 
 APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
@@ -24,12 +24,16 @@ test: ## Run tests with coverage output
 test-e2e: build ## Run shellspec end-to-end tests against the built binary
 	shellspec --shell sh
 
+bench: ## Run Go benchmarks for the hot paths
+	env GOOS=$(GOOS) $(GO_TEST) -bench=. -benchmem -run='^$$' ./internal/...
+
 lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml
 
-tools: ## Install developer tools
+tools: ## Install developer tools (linter, coverage, shellspec for e2e)
 	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	$(GO_INSTALL) github.com/k1LoW/octocov@latest
+	curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
 
 .DEFAULT_GOAL := help
 help:

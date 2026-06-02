@@ -1,0 +1,43 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  deployments: write
+
+jobs:
+  benchmark:
+    name: go benchmarks (regression gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run benchmarks
+        run: go test -bench=. -benchmem -run='^$' ./internal/... | tee benchmark.txt
+
+      - name: Compare against the stored baseline
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: "go"
+          output-file-path: benchmark.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # A run more than 2x slower than the baseline fails the check.
+          alert-threshold: "200%"
+          comment-on-alert: true
+          fail-on-alert: true
+          # Update the baseline (gh-pages) only when landing on main.
+          auto-push: ${{ github.event_name == 'push' }}
+          save-data-file: ${{ github.event_name == 'push' }}
