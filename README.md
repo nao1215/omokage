@@ -20,6 +20,8 @@ omokage (面影) is a Japanese word. It is written with 面 (face) and 影 (shad
 
 I often draft text with an LLM and then rework it so that it reads like something I wrote. Prompting and hand-editing only get me so far, so I wanted a tool that measures how close a draft is to my own style and points out where it drifts. omokage is that tool. You train it on your past writing, then check a draft against it.
 
+It is meant to be used by an LLM as much as by a person. An agent can run `check` after each rewrite, read the similarity and the differences, and keep revising until the draft sits closer to the trained voice.
+
 ## Install
 
 ```shell
