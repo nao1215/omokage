@@ -46,12 +46,57 @@ Profiles: /home/me/blog/profiles
 Cache: /home/me/blog/cache
 ```
 
-Learn a style from past writing.
+Learn a style from past writing. Pass one or more inputs after the flags: a
+directory (scanned for `.md` and `.txt`), an individual `.md`/`.txt` file, or any
+mix of them. You no longer have to gather everything into one folder first.
 
 ```shell
 $ omokage train --author me examples/posts
 Trained author "me" from 8 files.
 Profile: /home/me/blog/profiles/me.db
+```
+
+Mix a directory with individual files — `examples/posts` holds 8 files, so adding
+one more makes 9. The same file reached through more than one input (for example a
+directory and a file inside it) is learned only once.
+
+```shell
+$ omokage train --author me examples/posts examples/draft-keeps-voice.md
+Trained author "me" from 9 files.
+Profile: /home/me/blog/profiles/me.db
+```
+
+**What `INPUT...` accepts.** `train` takes one or more inputs, each of which is one
+of:
+
+- a **directory** — recursively scanned, collecting every `.md` and `.txt` file
+  inside it (other extensions are ignored);
+- an **`.md` or `.txt` file** — taken as given.
+
+The rules:
+
+- **Local paths only.** Relative and absolute paths both work; they resolve from
+  the current directory. omokage never touches the network.
+- **`.md` / `.txt` only.** A file passed directly with any other extension is an
+  error. Inside a directory, unsupported files are simply skipped.
+- **De-duplicated.** Passing the same file twice — directly, or via a directory
+  that contains it — learns it once, keyed by its real path.
+- **All-or-nothing.** If any single input is invalid, `train` reports that exact
+  input by name and trains nothing, so you can drop the offending argument and
+  re-run. Nothing is saved on a partial failure.
+- **URLs are rejected.** omokage does not fetch URLs (including authenticated
+  ones); passing `http://…`, `https://…`, or any other `scheme://…` is a clear
+  error. Save the page as a local `.md`/`.txt` file and pass that path instead.
+
+```shell
+$ omokage train --author me https://example.com/post
+URL inputs are not supported: https://example.com/post (omokage trains from local files only; save the page as a .md or .txt file and pass that path instead)
+
+$ omokage train --author me posts notes.pdf
+unsupported file notes.pdf: omokage learns only .md and .txt files
+
+$ omokage train --author me posts missing.md
+input not found: missing.md
 ```
 
 Check whether a draft still reads like that author. With a single trained
@@ -140,13 +185,32 @@ You never have to touch `profiles/*.db` directly.
 ```shell
 $ omokage list                 # bare names, one per line (pipe-friendly)
 me
-$ omokage list --long          # trained_at, file count, and source directory
+$ omokage list --long          # trained_at, file count, and source(s)
 AUTHOR  TRAINED            FILES  SOURCE
-me      2026-06-01 09:14   8      /home/me/writing/posts
+me      2026-06-01 09:14   9      /home/me/writing/posts (+1 more)
 $ omokage show --author me      # how a profile was trained (--format json too)
 $ omokage rename --author me --to watashi
 $ omokage remove --author watashi
 ```
+
+When a profile was trained from more than one input, `list --long` shows the
+first source with a `(+N more)` hint, and `show` lists every input in full:
+
+```shell
+$ omokage show --author me
+Author: me
+Trained: 2026-06-01 09:14:32 JST
+Files: 9
+Sources (2):
+  - /home/me/writing/posts
+  - /home/me/writing/draft-keeps-voice.md
+Documents: 9
+Sentences: 142
+Characters: 5210
+```
+
+`show --format json` carries the same provenance: a `source_dir` field (the first
+source, kept for compatibility) and a `sources` array with every input.
 
 `rename` keeps the trained data and refuses to overwrite an existing author;
 `remove` clears `default_author` if it pointed at the removed profile.

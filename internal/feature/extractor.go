@@ -82,6 +82,14 @@ func CollectFiles(root string) ([]string, error) {
 	return files, nil
 }
 
+// IsSupportedFile reports whether path names a file omokage can learn from: a
+// .md or .txt file. It lets callers reject an explicitly passed file with the
+// wrong extension before any collection happens, using the same rule CollectFiles
+// applies when walking a directory.
+func IsSupportedFile(path string) bool {
+	return supportedExtension(path)
+}
+
 func ExtractFile(path string) (Metrics, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {

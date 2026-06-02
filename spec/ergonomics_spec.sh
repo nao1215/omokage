@@ -77,6 +77,22 @@ Describe 'omokage ergonomics'
       The output should include 'Source:'
     End
 
+    It 'shows the provenance of several inputs'
+      omokage train --author me ja/posts ja/keep.md >/dev/null
+      When run omokage show --author me
+      The status should be success
+      The output should include 'Sources (2):'
+      The output should include 'keep.md'
+    End
+
+    It 'exposes several inputs in show --format json'
+      omokage train --author me ja/posts ja/keep.md >/dev/null
+      When run omokage show --author me --format json
+      The status should be success
+      The output should include '"sources"'
+      The output should include 'keep.md'
+    End
+
     It 'removes a profile without touching the filesystem directly'
       omokage train --author me ja/posts >/dev/null
       When run omokage remove --author me

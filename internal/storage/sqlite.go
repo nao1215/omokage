@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -54,8 +55,22 @@ CREATE TABLE IF NOT EXISTS profile (
   mean_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
   std_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
   mean_char_ngrams TEXT NOT NULL DEFAULT '{}',
-  std_char_ngrams TEXT NOT NULL DEFAULT '{}'
+  std_char_ngrams TEXT NOT NULL DEFAULT '{}',
+  sources TEXT NOT NULL DEFAULT '[]'
 );`
+
+// migrate brings an existing profile database up to the current schema. The
+// `sources` column was added after the original schema shipped, so a profile
+// trained by an older omokage lacks it. CREATE TABLE IF NOT EXISTS never alters
+// an existing table, so we add the column explicitly and ignore the
+// "duplicate column name" error a freshly created (already-current) table returns.
+func migrate(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, `ALTER TABLE profile ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	return nil
+}
 
 func SaveProfile(path string, record profile.Record) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -70,6 +85,9 @@ func SaveProfile(path string, record profile.Record) error {
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
+		return err
+	}
+	if err := migrate(ctx, db); err != nil {
 		return err
 	}
 
@@ -88,9 +106,9 @@ INSERT INTO profile (
   std_polite_ending_ratio, std_plain_ending_ratio,
   document_count, sentence_count, character_count,
   mean_lexical_frequencies, std_lexical_frequencies,
-  mean_char_ngrams, std_char_ngrams
+  mean_char_ngrams, std_char_ngrams, sources
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   author = excluded.author,
   source_dir = excluded.source_dir,
@@ -128,7 +146,8 @@ ON CONFLICT(id) DO UPDATE SET
   mean_lexical_frequencies = excluded.mean_lexical_frequencies,
   std_lexical_frequencies = excluded.std_lexical_frequencies,
   mean_char_ngrams = excluded.mean_char_ngrams,
-  std_char_ngrams = excluded.std_char_ngrams;
+  std_char_ngrams = excluded.std_char_ngrams,
+  sources = excluded.sources;
 `
 
 	mean := record.Distribution.Mean
@@ -174,8 +193,23 @@ ON CONFLICT(id) DO UPDATE SET
 		marshalLexical(std.LexicalFrequencies),
 		marshalLexical(mean.CharNgrams),
 		marshalLexical(std.CharNgrams),
+		marshalSources(record.Sources),
 	)
 	return err
+}
+
+// marshalSources serializes the list of learning-source paths to a JSON array
+// for storage, defaulting to an empty array so the NOT NULL column always has a
+// value.
+func marshalSources(sources []string) string {
+	if len(sources) == 0 {
+		return "[]"
+	}
+	encoded, err := json.Marshal(sources)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
 }
 
 // marshalLexical serializes a lexical frequency vector to JSON for storage,
@@ -208,6 +242,9 @@ func LoadProfile(path string) (profile.Record, error) {
 	defer db.Close()
 
 	if _, err := db.ExecContext(ctx, schema); err != nil {
+		return profile.Record{}, err
+	}
+	if err := migrate(ctx, db); err != nil {
 		return profile.Record{}, err
 	}
 
@@ -249,7 +286,8 @@ SELECT
   mean_lexical_frequencies,
   std_lexical_frequencies,
   mean_char_ngrams,
-  std_char_ngrams
+  std_char_ngrams,
+  sources
 FROM profile
 WHERE id = 1
 `)
@@ -259,6 +297,7 @@ WHERE id = 1
 	var stdLexicalJSON string
 	var meanNgramJSON string
 	var stdNgramJSON string
+	var sourcesJSON string
 	var record profile.Record
 	var mean feature.Metrics
 	var std feature.Metrics
@@ -301,6 +340,7 @@ WHERE id = 1
 		&stdLexicalJSON,
 		&meanNgramJSON,
 		&stdNgramJSON,
+		&sourcesJSON,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return profile.Record{}, fmt.Errorf("profile not found: %s", path)
@@ -319,7 +359,26 @@ WHERE id = 1
 	dist.Mean = mean
 	dist.StdDev = std
 	record.Distribution = dist
+	record.Sources = unmarshalSources(sourcesJSON)
+	// A profile trained before multi-input support has no sources list. Populate it
+	// from the single SourceDir so every consumer can rely on Sources being set.
+	if len(record.Sources) == 0 && record.SourceDir != "" {
+		record.Sources = []string{record.SourceDir}
+	}
 	return record, nil
+}
+
+// unmarshalSources deserializes a stored JSON array of learning-source paths,
+// returning an empty slice for missing or malformed data.
+func unmarshalSources(encoded string) []string {
+	if encoded == "" || encoded == "[]" {
+		return nil
+	}
+	var sources []string
+	if err := json.Unmarshal([]byte(encoded), &sources); err != nil {
+		return nil
+	}
+	return sources
 }
 
 // unmarshalLexical deserializes a stored lexical frequency vector, returning an

@@ -225,7 +225,7 @@ func TestRunMissingArgMessages(t *testing.T) {
 	}{
 		{"check missing FILE", []string{"check"}, "missing FILE"},
 		{"diff missing FILE_B", []string{"diff", "a.md"}, "missing FILE_B"},
-		{"train missing DIRECTORY", []string{"train", "--author", "me"}, "missing DIRECTORY"},
+		{"train missing INPUT", []string{"train", "--author", "me"}, "missing INPUT"},
 		{"train missing --author", []string{"train", "examples/posts"}, "missing --author"},
 		{"remove missing --author", []string{"remove"}, "missing --author"},
 		{"rename missing --to", []string{"rename", "--author", "me"}, "missing --to"},

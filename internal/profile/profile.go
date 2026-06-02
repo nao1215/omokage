@@ -14,8 +14,17 @@ import (
 // Record is a persisted author profile: the learned feature distribution plus
 // the metadata describing how it was trained.
 type Record struct {
-	Author       string
-	SourceDir    string
+	Author string
+	// SourceDir is the primary learning source. For a single input it is that
+	// input; for several it is the first one. It is kept as a single field for
+	// backward compatibility with profiles trained before multi-input support and
+	// with the compact `list --long` SOURCE column. Sources carries the full list.
+	SourceDir string
+	// Sources lists every input the profile was trained from (directories and
+	// individual files), as normalized absolute paths, de-duplicated. It is the
+	// provenance shown by `show`. Profiles written before this field existed load
+	// with Sources populated from SourceDir, so consumers can always rely on it.
+	Sources      []string
 	TrainedAt    time.Time
 	FileCount    int
 	Distribution feature.Distribution

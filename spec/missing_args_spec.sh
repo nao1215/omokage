@@ -23,14 +23,14 @@ Describe 'omokage missing-argument errors'
     The stderr should include 'Usage: omokage diff'
   End
 
-  It 'train with --author but no directory reports the missing directory'
+  It 'train with --author but no input reports the missing input'
     When run "$OMOKAGE_BIN" train --author me
     The status should be failure
-    The stderr should include 'missing DIRECTORY'
+    The stderr should include 'missing INPUT'
     The stderr should include 'Usage: omokage train'
   End
 
-  It 'train with a directory but no --author reports the missing flag'
+  It 'train with an input but no --author reports the missing flag'
     When run "$OMOKAGE_BIN" train examples/posts
     The status should be failure
     The stderr should include 'missing --author'

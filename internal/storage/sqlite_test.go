@@ -106,6 +106,59 @@ func TestSaveLoadProfile(t *testing.T) {
 	}
 }
 
+func TestSaveLoadProfileRoundTripsSources(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "profiles", "multi.db")
+	record := profile.Record{
+		Author:    "me",
+		SourceDir: "/tmp/posts",
+		Sources:   []string{"/tmp/posts", "/tmp/draft.md", "/tmp/note.txt"},
+		TrainedAt: time.Date(2026, time.June, 2, 9, 0, 0, 0, time.UTC),
+		FileCount: 5,
+	}
+	if err := SaveProfile(path, record); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadProfile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Sources) != 3 {
+		t.Fatalf("expected 3 sources, got %d: %v", len(loaded.Sources), loaded.Sources)
+	}
+	for i, want := range record.Sources {
+		if loaded.Sources[i] != want {
+			t.Fatalf("source %d mismatch: got=%q want=%q", i, loaded.Sources[i], want)
+		}
+	}
+}
+
+// A profile saved with no Sources (e.g. one trained before multi-input support,
+// or any record that only set SourceDir) must load with Sources populated from
+// SourceDir so every consumer can rely on it.
+func TestLoadProfileFallsBackToSourceDir(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "profiles", "legacy.db")
+	record := profile.Record{
+		Author:    "me",
+		SourceDir: "/tmp/corpus",
+		TrainedAt: time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC),
+		FileCount: 3,
+	}
+	if err := SaveProfile(path, record); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadProfile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Sources) != 1 || loaded.Sources[0] != "/tmp/corpus" {
+		t.Fatalf("expected Sources to fall back to [SourceDir], got %v", loaded.Sources)
+	}
+}
+
 func TestLoadProfileFromEmptyDatabase(t *testing.T) {
 	t.Parallel()
 

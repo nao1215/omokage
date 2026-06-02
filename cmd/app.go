@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -208,7 +209,7 @@ func (a *App) resolveAuthor(scope project.Scope, explicit string) (string, error
 	}
 	switch len(authors) {
 	case 0:
-		return "", errors.New("no author profiles found; train one with 'omokage train --author NAME DIRECTORY'")
+		return "", errors.New("no author profiles found; train one with 'omokage train --author NAME INPUT...'")
 	case 1:
 		return authors[0], nil
 	default:
@@ -274,8 +275,10 @@ func (a *App) runTrain(args []string) int {
 	makeDefault := flagSet.Bool("default", false, "set this author as the store's default (used by check/show when --author is omitted)")
 	scopeF := registerScopeFlags(flagSet)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Learn an author's style from every .md and .txt file in DIRECTORY.\n")
-		writef(a.stderr, "Usage: omokage train --author AUTHOR [--default] DIRECTORY\n")
+		writef(a.stderr, "Learn an author's style from .md and .txt files.\n")
+		writef(a.stderr, "INPUT is one or more directories and/or .md/.txt files (mixed freely);\n")
+		writef(a.stderr, "directories are scanned for .md and .txt, files are taken as given.\n")
+		writef(a.stderr, "Usage: omokage train --author AUTHOR [--default] INPUT...\n")
 		printFlagDefaults(a.stderr, flagSet)
 	}
 	if code, ok := parseArgs(flagSet, args); !ok {
@@ -284,14 +287,8 @@ func (a *App) runTrain(args []string) int {
 	if strings.TrimSpace(*author) == "" {
 		return a.usageError(flagSet, "missing --author")
 	}
-	switch flagSet.NArg() {
-	case 1:
-		// exactly one DIRECTORY, as required
-	case 0:
-		return a.usageError(flagSet, "missing DIRECTORY")
-	default:
-		flagSet.Usage()
-		return 1
+	if flagSet.NArg() == 0 {
+		return a.usageError(flagSet, "missing INPUT: pass one or more directories or .md/.txt files")
 	}
 
 	scope, err := a.resolveScope(scopeF)
@@ -304,19 +301,13 @@ func (a *App) runTrain(args []string) int {
 		return 1
 	}
 
-	sourceDir, err := resolvePath(a.workDir, flagSet.Arg(0))
-	if err != nil {
-		writeLine(a.stderr, err)
-		return 1
-	}
-
-	files, err := feature.CollectFiles(sourceDir)
+	sources, files, err := gatherTrainingInputs(a.workDir, flagSet.Args())
 	if err != nil {
 		writeLine(a.stderr, err)
 		return 1
 	}
 	if len(files) == 0 {
-		writef(a.stderr, "no supported files found in %s\n", sourceDir)
+		writef(a.stderr, "no supported files found in %s\n", strings.Join(sources, ", "))
 		return 1
 	}
 
@@ -329,7 +320,7 @@ func (a *App) runTrain(args []string) int {
 	// whitespace-only documents. If nothing usable is left, a saved profile would
 	// be all zeros and every later check would score against noise, so refuse.
 	if distribution.DocumentCount == 0 {
-		writef(a.stderr, "no usable text found in %s (all files were empty)\n", sourceDir)
+		writef(a.stderr, "no usable text found in %s (all files were empty)\n", strings.Join(sources, ", "))
 		return 1
 	}
 
@@ -341,7 +332,8 @@ func (a *App) runTrain(args []string) int {
 
 	record := profile.Record{
 		Author:       *author,
-		SourceDir:    sourceDir,
+		SourceDir:    sources[0],
+		Sources:      sources,
 		TrainedAt:    time.Now().UTC(),
 		FileCount:    len(files),
 		Distribution: distribution,
@@ -623,7 +615,7 @@ func (a *App) runList(args []string) int {
 			name += " (default)"
 		}
 		writef(tw, "%s\t%s\t%d\t%s\n",
-			name, record.TrainedAt.Format("2006-01-02 15:04 MST"), record.FileCount, record.SourceDir)
+			name, record.TrainedAt.Format("2006-01-02 15:04 MST"), record.FileCount, sourceColumn(record))
 	}
 	return flushTab(a.stderr, tw)
 }
@@ -678,6 +670,7 @@ func (a *App) runShow(args []string) int {
 			TrainedAt:      record.TrainedAt.Format(time.RFC3339),
 			FileCount:      record.FileCount,
 			SourceDir:      record.SourceDir,
+			Sources:        recordSources(record),
 			DocumentCount:  record.Distribution.DocumentCount,
 			SentenceCount:  record.Distribution.SentenceCount,
 			CharacterCount: record.Distribution.CharacterCount,
@@ -698,7 +691,17 @@ func (a *App) runShow(args []string) int {
 	}
 	writef(a.stdout, "Trained: %s\n", record.TrainedAt.Format("2006-01-02 15:04:05 MST"))
 	writef(a.stdout, "Files: %d\n", record.FileCount)
-	writef(a.stdout, "Source: %s\n", record.SourceDir)
+	// One input keeps the familiar single "Source:" line; several switch to a
+	// numbered "Sources (N):" block so the full provenance is visible.
+	sources := recordSources(record)
+	if len(sources) <= 1 {
+		writef(a.stdout, "Source: %s\n", record.SourceDir)
+	} else {
+		writef(a.stdout, "Sources (%d):\n", len(sources))
+		for _, source := range sources {
+			writef(a.stdout, "  - %s\n", source)
+		}
+	}
 	writef(a.stdout, "Documents: %d\n", record.Distribution.DocumentCount)
 	writef(a.stdout, "Sentences: %d\n", record.Distribution.SentenceCount)
 	writef(a.stdout, "Characters: %d\n", record.Distribution.CharacterCount)
@@ -880,7 +883,7 @@ func (a *App) printRootHelp() {
 	writeLine(a.stdout)
 	writeLine(a.stdout, "Commands:")
 	writeLine(a.stdout, "  init     Create an omokage store here, or --global for a per-user one.")
-	writeLine(a.stdout, "  train    Learn an author's style from a directory of .md and .txt files.")
+	writeLine(a.stdout, "  train    Learn an author's style from directories and/or .md and .txt files.")
 	writeLine(a.stdout, "  check    Score how closely a file matches a trained author (--explain for details).")
 	writeLine(a.stdout, "  diff     Compare two files directly, without a trained profile.")
 	writeLine(a.stdout, "  list     List the author profiles in the store (--long for details).")
@@ -902,14 +905,45 @@ func (a *App) printRootHelp() {
 
 // profileSummaryJSON is the machine-readable form of `show`.
 type profileSummaryJSON struct {
-	Author         string `json:"author"`
-	TrainedAt      string `json:"trained_at"`
-	FileCount      int    `json:"file_count"`
-	SourceDir      string `json:"source_dir"`
-	DocumentCount  int    `json:"document_count"`
-	SentenceCount  int    `json:"sentence_count"`
-	CharacterCount int    `json:"character_count"`
-	Default        bool   `json:"default"`
+	Author    string `json:"author"`
+	TrainedAt string `json:"trained_at"`
+	FileCount int    `json:"file_count"`
+	// SourceDir is the primary source, retained for backward compatibility with
+	// consumers that read a single path. Sources lists every input.
+	SourceDir      string   `json:"source_dir"`
+	Sources        []string `json:"sources"`
+	DocumentCount  int      `json:"document_count"`
+	SentenceCount  int      `json:"sentence_count"`
+	CharacterCount int      `json:"character_count"`
+	Default        bool     `json:"default"`
+}
+
+// recordSources returns the learning sources of a profile, always non-empty for a
+// trained profile: it falls back to the single SourceDir for profiles (or test
+// records) that predate the Sources list.
+func recordSources(record profile.Record) []string {
+	if len(record.Sources) > 0 {
+		return record.Sources
+	}
+	if record.SourceDir != "" {
+		return []string{record.SourceDir}
+	}
+	return nil
+}
+
+// sourceColumn renders a profile's provenance for the compact `list --long`
+// SOURCE column: the single source as-is, or the first source with a "(+N more)"
+// suffix so the table stays one line per author while signaling multiple inputs.
+func sourceColumn(record profile.Record) string {
+	sources := recordSources(record)
+	switch len(sources) {
+	case 0:
+		return ""
+	case 1:
+		return sources[0]
+	default:
+		return fmt.Sprintf("%s (+%d more)", sources[0], len(sources)-1)
+	}
 }
 
 func newFlagSet(name string, output io.Writer) *flag.FlagSet {
@@ -963,6 +997,87 @@ func printFlagDefaults(w io.Writer, flagSet *flag.FlagSet) {
 		}
 		writeLine(w)
 	})
+}
+
+// gatherTrainingInputs validates each train INPUT and resolves it to the corpus
+// it contributes. It returns sources — the de-duplicated, normalized absolute
+// paths of the inputs themselves, kept as the profile's provenance — and files —
+// the de-duplicated, sorted list of .md/.txt files those inputs resolve to.
+//
+// Every input is checked up front and the first problem stops the whole run with
+// a specific, by-name error — nothing is trained — so a single bad input never
+// produces a partial profile and the user knows exactly which argument to drop
+// and re-run. The checks, in order: a URL (rejected outright; omokage reads local
+// files only and never fetches the network), a path that does not exist, and a
+// file passed directly with an unsupported extension. De-duplication runs at two
+// levels: the same input given twice collapses to one source, and the same file
+// reached through two inputs (e.g. a directory and a file inside it) is learned
+// once, keyed by its normalized absolute path.
+func gatherTrainingInputs(workDir string, inputs []string) (sources, files []string, err error) {
+	seenInput := make(map[string]bool, len(inputs))
+	for _, raw := range inputs {
+		if looksLikeURL(raw) {
+			return nil, nil, fmt.Errorf("URL inputs are not supported: %s (omokage trains from local files only; save the page as a .md or .txt file and pass that path instead)", raw)
+		}
+		abs, resolveErr := resolvePath(workDir, raw)
+		if resolveErr != nil {
+			return nil, nil, resolveErr
+		}
+		info, statErr := os.Stat(abs)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				return nil, nil, fmt.Errorf("input not found: %s", raw)
+			}
+			return nil, nil, statErr
+		}
+		if !info.IsDir() && !feature.IsSupportedFile(abs) {
+			return nil, nil, fmt.Errorf("unsupported file %s: omokage learns only .md and .txt files", raw)
+		}
+		if !seenInput[abs] {
+			seenInput[abs] = true
+			sources = append(sources, abs)
+		}
+	}
+
+	seenFile := make(map[string]bool)
+	for _, src := range sources {
+		collected, collectErr := feature.CollectFiles(src)
+		if collectErr != nil {
+			return nil, nil, collectErr
+		}
+		for _, file := range collected {
+			if !seenFile[file] {
+				seenFile[file] = true
+				files = append(files, file)
+			}
+		}
+	}
+	sort.Strings(files)
+	return sources, files, nil
+}
+
+// looksLikeURL reports whether an input is a URL rather than a local path, so
+// train can reject it with a clear, dedicated message instead of letting it fall
+// through to a confusing "input not found". It matches an RFC 3986 scheme
+// followed by "://" (http://, https://, ftp://, file://, s3://, …), which also
+// covers credential-bearing forms like https://user:pass@host/page that omokage
+// would never fetch.
+func looksLikeURL(input string) bool {
+	mark := strings.Index(input, "://")
+	if mark <= 0 {
+		return false
+	}
+	for i, r := range input[:mark] {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+			// letters are valid anywhere in a scheme
+		case i > 0 && (r >= '0' && r <= '9' || r == '+' || r == '-' || r == '.'):
+			// digits and +-. are valid after the first character
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func resolvePath(baseDir, target string) (string, error) {
