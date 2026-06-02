@@ -51,21 +51,49 @@ func addNgrams(freq map[string]float64, runes []rune, order int) {
 // inlineCodePattern matches an inline code span delimited by backticks.
 var inlineCodePattern = regexp.MustCompile("`[^`]*`")
 
-// stripCode removes fenced code blocks and inline code spans from the text so
-// that source code does not contribute to the authorship features. Code shares
-// vocabulary and character sequences across authors and would otherwise drown
-// out the natural-language signal in technical writing. Both CommonMark fence
-// markers are recognized — backtick (``` … ```) and tilde (~~~ … ~~~) — and a
-// block is closed only by its own marker, so a tilde line inside a backtick
-// block (or vice versa) is treated as content, not a boundary.
-// StripCode removes fenced and inline code from text and returns the remaining
-// prose. It is the exported entry point other packages (e.g. term extraction)
-// use to measure prose only, exactly as the feature extractor does, after
-// normalizing CRLF line endings.
-func StripCode(text string) string {
-	return stripCode(strings.ReplaceAll(text, "\r\n", "\n"))
+// Patterns for the non-prose constructs that survive code stripping but are
+// layout/markup, not natural language, so they must not feed the features.
+var (
+	// frontMatterPattern matches a leading YAML front-matter block (Hugo/Jekyll),
+	// whose keys and paths (title, image, categories) are metadata, not prose.
+	frontMatterPattern = regexp.MustCompile(`(?s)\A\s*---\n.*?\n---\n`)
+	// imagePattern matches a Markdown image; it is dropped whole (alt text and the
+	// path are not the author's prose).
+	imagePattern = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
+	// linkPattern matches a Markdown link; the visible text is kept and the URL
+	// dropped, so a link target never contributes URL fragments (https, com, jp).
+	linkPattern = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	urlPattern  = regexp.MustCompile(`https?://\S+`)
+	// htmlTagPattern matches an HTML tag starting with a letter (so a stray "<" or
+	// "a < b" in prose is left alone). Raw HTML embedded in Markdown is layout.
+	htmlTagPattern    = regexp.MustCompile(`</?[A-Za-z][^>]*>`)
+	htmlEntityPattern = regexp.MustCompile(`&[a-zA-Z]+;`)
+)
+
+// StripNonProse removes everything that is not natural-language prose — YAML
+// front matter, fenced and inline code, Markdown images, Markdown link URLs (the
+// visible link text is kept), raw URLs, HTML tags, and HTML entities — and
+// returns the remaining prose with CRLF normalized. It is the single chokepoint
+// the feature extractor and term extraction both run through, so they measure the
+// same prose. Code shares vocabulary and character sequences across authors and
+// would otherwise drown out the natural-language signal in technical writing;
+// markup and metadata would manufacture drift from layout rather than voice.
+func StripNonProse(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = frontMatterPattern.ReplaceAllString(text, "")
+	text = stripCode(text)
+	text = imagePattern.ReplaceAllString(text, " ")
+	text = linkPattern.ReplaceAllString(text, "$1")
+	text = urlPattern.ReplaceAllString(text, " ")
+	text = htmlTagPattern.ReplaceAllString(text, " ")
+	text = htmlEntityPattern.ReplaceAllString(text, " ")
+	return text
 }
 
+// stripCode removes fenced code blocks and inline code spans from the text. Both
+// CommonMark fence markers are recognized — backtick (``` … ```) and tilde
+// (~~~ … ~~~) — and a block is closed only by its own marker, so a tilde line
+// inside a backtick block (or vice versa) is treated as content, not a boundary.
 func stripCode(text string) string {
 	lines := strings.Split(text, "\n")
 	kept := make([]string, 0, len(lines))

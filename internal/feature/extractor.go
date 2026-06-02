@@ -126,7 +126,14 @@ func ExtractFileWithSegments(path string) (Metrics, []Segment, error) {
 // paragraph's position among the non-empty paragraphs so a report can name it.
 func ExtractSegments(text string) []Segment {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
-	paragraphs := splitParagraphs(normalized)
+	// Strip code and HTML on the whole document before splitting into paragraphs.
+	// Splitting first would break a fenced block that contains a blank line (mermaid
+	// diagrams and shell sessions routinely do): each fragment would lose its
+	// opening fence and be measured as prose, so the report would point at a diagram
+	// or CLI transcript as a drifting "paragraph". Cleaning first keeps segment
+	// metrics and excerpts consistent with the whole-document measurement.
+	prose := StripNonProse(normalized)
+	paragraphs := splitParagraphs(prose)
 	segments := make([]Segment, 0, len(paragraphs))
 	index := 0
 	for _, paragraph := range paragraphs {
@@ -293,8 +300,9 @@ func ExtractText(text string) Metrics {
 	// structural features (sentence length, punctuation, Markdown density) are
 	// measured on the same prose too, so adding a fenced code block to a draft no
 	// longer manufactures false drift. This matches the documented promise that
-	// code blocks are removed before the features are measured.
-	prose := stripCode(normalized)
+	// code blocks are removed before the features are measured. HTML tags are
+	// stripped too: raw HTML embedded in Markdown is layout, not prose.
+	prose := StripNonProse(normalized)
 	sentences := splitSentences(prose)
 	sentenceLengths := make([]float64, 0, len(sentences))
 	for _, sentence := range sentences {

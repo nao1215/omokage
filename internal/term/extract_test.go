@@ -77,7 +77,7 @@ func TestExtractDocumentsEmptyInputs(t *testing.T) {
 
 // TestStripNoiseExcludesURLsFrontmatterAndHTML checks that link URLs, YAML front
 // matter, and HTML tags never become term candidates, while visible prose does.
-func TestStripNoiseExcludesURLsFrontmatterAndHTML(t *testing.T) {
+func TestExtractDocumentsExcludesNoiseTokens(t *testing.T) {
 	t.Parallel()
 
 	doc := "---\ntitle: foo\nimage: images/cover.jpg\n---\n\n" +

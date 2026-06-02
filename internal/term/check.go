@@ -39,7 +39,7 @@ func (p Profile) CheckText(text string) []Warning {
 		surface  string
 	}
 	counts := make(map[usage]int)
-	for _, surface := range scanCandidates(stripNoise(feature.StripCode(text))) {
+	for _, surface := range scanCandidates(feature.StripNonProse(text)) {
 		groupKey, ok := groupKeyForNorm[normalizeKey(surface)]
 		if !ok {
 			continue
