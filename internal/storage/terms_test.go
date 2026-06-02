@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -108,6 +109,20 @@ func TestLoadTermsMissingFile(t *testing.T) {
 	}
 	if len(got.Groups) != 0 {
 		t.Fatalf("expected an empty profile, got %+v", got.Groups)
+	}
+}
+
+// TestLoadTermsCorruptFile checks that a non-database file is reported as an
+// error (the caller degrades to an empty list), not loaded as empty.
+func TestLoadTermsCorruptFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "broken.db")
+	if err := os.WriteFile(path, []byte("this is not a sqlite database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadTerms(path); err == nil {
+		t.Fatal("expected an error loading a corrupt database file")
 	}
 }
 
