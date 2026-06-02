@@ -1,6 +1,12 @@
 name: reviewdog
 on: [pull_request]
 
+# reviewdog posts its findings as pull-request review comments, which needs
+# write access to pull requests; reading the checked-out code needs contents.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   golangci-lint:
     name: golangci-lint
