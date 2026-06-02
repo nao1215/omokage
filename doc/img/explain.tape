@@ -17,9 +17,9 @@ Set Theme "Catppuccin Mocha"
 
 Hide
 Type "export PATH=/tmp:$PATH; cd /tmp/omokage-demo" Enter
-Type "omokage init >/dev/null; omokage train --author me examples/posts >/dev/null; clear" Enter
+Type "omokage init >/dev/null; omokage train --author me examples/ja/posts >/dev/null; clear" Enter
 Show
 
-Type "# Late-stage tuning: what should I fix, and which paragraph?" Enter
-Type "omokage check --author me --explain examples/draft-keeps-voice.md" Enter
+Type "# Late-stage tuning on a Japanese corpus: what to fix, and which paragraph?" Enter
+Type "omokage check --author me --explain examples/ja/draft-keeps-voice.md" Enter
 Sleep 4500ms

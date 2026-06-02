@@ -30,7 +30,7 @@ It runs on Windows, macOS, and Linux. Building from source needs Go 1.25 or late
 
 ## Usage
 
-The repository includes a small example corpus under [examples/](./examples) so you can follow along.
+The repository includes a small example corpus under [examples/](./examples) so you can follow along — English under [examples/en/](./examples/en) and Japanese under [examples/ja/](./examples/ja).
 
 Create a project in the current directory. This writes `omokage.toml`, `profiles/`, and `cache/`.
 
@@ -47,17 +47,17 @@ Learn a style from past writing. `train` takes one or more inputs: directories
 any mix, so you need not gather everything into one folder first.
 
 ```shell
-$ omokage train --author me examples/posts
+$ omokage train --author me examples/en/posts
 Trained author "me" from 8 files.
 Profile: /home/me/blog/profiles/me.db
 ```
 
-Paths may be relative or absolute. `examples/posts` holds 8 files, so adding one
-more makes 9; a file reached twice — through a containing directory or a symlink —
-is learned once, matched by its real path.
+Paths may be relative or absolute. `examples/en/posts` holds 8 files, so adding
+one more makes 9; a file reached twice — through a containing directory or a
+symlink — is learned once, matched by its real path.
 
 ```shell
-$ omokage train --author me examples/posts examples/draft-keeps-voice.md
+$ omokage train --author me examples/en/posts examples/en/draft-keeps-voice.md
 Trained author "me" from 9 files.
 Profile: /home/me/blog/profiles/me.db
 ```
@@ -81,35 +81,37 @@ Check whether a draft still reads like that author. With a single trained
 profile you can drop `--author` entirely — omokage selects the only one.
 
 ```shell
-$ omokage check examples/draft-keeps-voice.md
+$ omokage check examples/en/draft-keeps-voice.md
 Author: me
-Similarity: 73%
+Similarity: 70%
 
 Differences:
-- character n-gram "持ち" is higher than reference
-- character n-gram "気持" is higher than reference
-- character n-gram "気持ち" is higher than reference
+- character n-gram "gh" is higher than reference
+- function word "at" is higher than reference
+- character n-gram "ht" is higher than reference
 ```
 
 The same idea rewritten in a stiff, formal voice scores low, and omokage shows what changed.
 
 ```shell
-$ omokage check --author me examples/draft-lost-voice.md
+$ omokage check --author me examples/en/draft-lost-voice.md
 Author: me
-Similarity: 0%
+Similarity: 26%
 
 Differences:
-- polite sentence-ending ratio is lower than reference
-- kanji ratio is higher than reference
-- hiragana ratio is lower than reference
+- average sentence length is higher than reference
+- paragraph length variance is higher than reference
+- sentence length variance is higher than reference
 ```
+
+omokage works the same on Japanese, where the sentence-ending register (敬体 / 常体) and the kanji/kana balance make the difference even clearer. The `diff` and `--explain` examples below use the Japanese corpus to show that depth.
 
 You can also compare two documents directly, without training a profile.
 
 ```shell
-$ omokage diff examples/draft-keeps-voice.md examples/draft-lost-voice.md
-Reference: examples/draft-keeps-voice.md
-Target: examples/draft-lost-voice.md
+$ omokage diff examples/ja/draft-keeps-voice.md examples/ja/draft-lost-voice.md
+Reference: examples/ja/draft-keeps-voice.md
+Target: examples/ja/draft-lost-voice.md
 Similarity: 54%
 
 Differences:
@@ -123,7 +125,7 @@ Similarity runs from 0 to 100 and shows how close the text sits to the learned s
 For final tuning, add `--explain` to lead with the high-level, editable features (register, script balance, structure), each with the draft's value, your trained mean ± spread, a z-score, and a fix priority, followed by the low-level function-word and n-gram drift as supporting detail and the paragraphs that drift most. `--format json` prints the same data for an LLM to read between rewrites. Both are opt-in, so plain `check` stays fast.
 
 ```shell
-$ omokage check --author me --explain examples/draft-lost-voice.md
+$ omokage check --author me --explain examples/ja/draft-lost-voice.md
 Author: me
 Similarity: 0%
 
@@ -159,7 +161,7 @@ no flags and multi-author use stays unambiguous:
 Set a default without editing the config by hand:
 
 ```shell
-$ omokage train --author me --default examples/posts
+$ omokage train --author me --default examples/en/posts
 ```
 
 ## Managing profiles

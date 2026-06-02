@@ -11,7 +11,7 @@ Output demo.gif
 Set Shell bash
 Set FontSize 18
 Set Width 1180
-Set Height 820
+Set Height 760
 Set Padding 24
 Set Theme "Catppuccin Mocha"
 
@@ -22,16 +22,13 @@ Show
 Type "omokage init" Enter
 Sleep 1200ms
 
-Type "omokage train --author me examples/posts" Enter
+Type "omokage train --author me examples/en/posts" Enter
 Sleep 1500ms
 
 Type "# A new draft that keeps the author's voice" Enter
-Type "omokage check --author me examples/draft-keeps-voice.md" Enter
+Type "omokage check --author me examples/en/draft-keeps-voice.md" Enter
 Sleep 2500ms
 
-Type "# The same idea rewritten in a stiff, different voice" Enter
-Type "omokage check --author me examples/draft-lost-voice.md" Enter
-Sleep 2500ms
-
-Type "omokage diff examples/draft-keeps-voice.md examples/draft-lost-voice.md" Enter
+Type "# The same idea rewritten in a stiff, formal voice" Enter
+Type "omokage check --author me examples/en/draft-lost-voice.md" Enter
 Sleep 2800ms
