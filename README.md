@@ -147,6 +147,28 @@ Paragraphs that drift most:
 
 ![explain demo](./doc/img/explain.gif)
 
+## Term preferences
+
+`train` also learns which surface form you use for a recurring term (`DB` vs
+`データベース`, `HTTP` vs `http`) and stores it in the same per-author database.
+This runs locally like the rest of omokage: no LLM, no network, no dictionary,
+and only surfaces and counts are stored, never the training text.
+
+A `normalized_key` folds case, full-width/half-width ASCII, and edge punctuation,
+so `DB`, `db`, and `ＤＢ` share one key. A `group_key` merges different normalized
+keys into one concept only when the corpus declares the bridge itself, such as
+`データベース（DB）` or `データベース。以下、DB`; one side must be a Japanese phrase
+and the other a short uppercase acronym. A bare `A（B）` is not enough, so `優先度`
+and `プライオリティ` stay separate unless bridged. The preferred surface of a group
+is the one with the highest `doc_count`, then `count`, then the smallest surface.
+
+`show --format json` adds `term_preferences` (group, preferred surface, counts,
+and variants). `check --format json` adds `term_warnings` for any draft surface
+that differs from its group's preferred form; this is a separate layer that never
+changes the similarity score. Both appear only in JSON, so plain `check` is
+unchanged. Extraction is intentionally lightweight; half-width katakana and
+synonyms without a corpus-declared bridge are out of scope.
+
 ## Choosing the author
 
 `check` and `show` resolve the author in this order, so single-author use needs

@@ -57,6 +57,28 @@ CREATE TABLE IF NOT EXISTS profile (
   mean_char_ngrams TEXT NOT NULL DEFAULT '{}',
   std_char_ngrams TEXT NOT NULL DEFAULT '{}',
   sources TEXT NOT NULL DEFAULT '[]'
+);
+
+-- Term preferences are profile-local: this database holds exactly one author's
+-- profile, so these tables describe only that author's notation choices. No
+-- profile_id column is needed. normalized_key and group_key are kept as separate
+-- columns so a reader can tell whether two surfaces were merged by plain
+-- normalization (same normalized_key) or by a corpus-declared alias bridge (same
+-- group_key spanning different normalized_keys). Original training text is never
+-- stored — only surfaces and their counts.
+CREATE TABLE IF NOT EXISTS term_group (
+  group_key TEXT PRIMARY KEY,
+  preferred_surface TEXT NOT NULL,
+  total_count INTEGER NOT NULL,
+  doc_count INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS term_variant (
+  group_key TEXT NOT NULL,
+  normalized_key TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  doc_count INTEGER NOT NULL,
+  PRIMARY KEY (group_key, surface)
 );`
 
 // migrate brings an existing profile database up to the current schema. The

@@ -19,6 +19,7 @@ import (
 	"github.com/nao1215/omokage/internal/profile"
 	"github.com/nao1215/omokage/internal/project"
 	"github.com/nao1215/omokage/internal/storage"
+	"github.com/nao1215/omokage/internal/term"
 )
 
 // Output formats for `check`. text is the default human-readable report; json
@@ -373,6 +374,17 @@ func (a *App) runTrain(args []string) int {
 		return 1
 	}
 
+	// Term preferences are a separate, profile-local layer extracted from the same
+	// files (no LLM, no network). They are stored in the same database next to the
+	// style distribution. Failing to write them is reported but does not undo the
+	// trained profile, which is already saved and valid on its own.
+	terms, err := term.ExtractCorpus(files)
+	if err != nil {
+		writef(a.stderr, "warning: the profile was trained, but extracting term preferences failed: %v\n", err)
+	} else if err := storage.SaveTerms(profilePath, terms); err != nil {
+		writef(a.stderr, "warning: the profile was trained, but saving term preferences failed: %v\n", err)
+	}
+
 	writef(a.stdout, "Trained author %q from %d files.\n", record.Author, record.FileCount)
 	writef(a.stdout, "Profile: %s\n", profilePath)
 
@@ -503,7 +515,17 @@ func (a *App) runCheck(args []string) int {
 	}
 	explanation := profile.Explain(record.Distribution, targetMetrics, segments, scope.Config.Features)
 	if *format == formatJSON {
-		if err := renderExplanationJSON(a.stdout, record.Author, explanation); err != nil {
+		// Term warnings are a separate layer from the similarity score: they report
+		// where the draft used a non-preferred surface, and never alter the score.
+		// A failure to load or read terms degrades to no warnings rather than hiding
+		// the drift report.
+		var warnings []term.Warning
+		if terms, err := storage.LoadTerms(profilePath); err == nil {
+			if draft, err := os.ReadFile(filepath.Clean(targetPath)); err == nil {
+				warnings = terms.CheckText(string(draft))
+			}
+		}
+		if err := renderExplanationJSON(a.stdout, record.Author, explanation, warnings); err != nil {
 			writeLine(a.stderr, err)
 			return 1
 		}
@@ -698,16 +720,27 @@ func (a *App) runShow(args []string) int {
 	}
 
 	if *format == formatJSON {
+		// Term preferences are reported only in the JSON form (the text form stays a
+		// short provenance summary, not a term dump). They are auxiliary to the
+		// profile summary, so a load failure is reported on stderr but does not fail
+		// the command or corrupt the JSON on stdout: the summary is still emitted with
+		// an empty term list.
+		terms, err := storage.LoadTerms(profilePath)
+		if err != nil {
+			writef(a.stderr, "warning: could not load term preferences: %v\n", err)
+			terms = term.Profile{}
+		}
 		payload := profileSummaryJSON{
-			Author:         record.Author,
-			TrainedAt:      record.TrainedAt.Format(time.RFC3339),
-			FileCount:      record.FileCount,
-			SourceDir:      record.SourceDir,
-			Sources:        recordSources(record),
-			DocumentCount:  record.Distribution.DocumentCount,
-			SentenceCount:  record.Distribution.SentenceCount,
-			CharacterCount: record.Distribution.CharacterCount,
-			Default:        record.Author == strings.TrimSpace(scope.Config.Defaults.Author),
+			Author:          record.Author,
+			TrainedAt:       record.TrainedAt.Format(time.RFC3339),
+			FileCount:       record.FileCount,
+			SourceDir:       record.SourceDir,
+			Sources:         recordSources(record),
+			DocumentCount:   record.Distribution.DocumentCount,
+			SentenceCount:   record.Distribution.SentenceCount,
+			CharacterCount:  record.Distribution.CharacterCount,
+			Default:         record.Author == strings.TrimSpace(scope.Config.Defaults.Author),
+			TermPreferences: toTermPreferenceJSON(terms),
 		}
 		encoder := json.NewEncoder(a.stdout)
 		encoder.SetIndent("", "  ")
@@ -956,6 +989,54 @@ type profileSummaryJSON struct {
 	SentenceCount  int      `json:"sentence_count"`
 	CharacterCount int      `json:"character_count"`
 	Default        bool     `json:"default"`
+	// TermPreferences is the profile's learned notation preferences. It is always
+	// present (an empty array when none were extracted) so the shape is stable.
+	TermPreferences []termPreferenceJSON `json:"term_preferences"`
+}
+
+// termPreferenceJSON is one same-concept group in `show --format json`.
+type termPreferenceJSON struct {
+	GroupKey         string            `json:"group_key"`
+	PreferredSurface string            `json:"preferred_surface"`
+	DocCount         int               `json:"doc_count"`
+	TotalCount       int               `json:"total_count"`
+	Variants         []termVariantJSON `json:"variants"`
+}
+
+// termVariantJSON is one surface form within a term preference group. normalized_key
+// is reported separately from group_key so a reader can tell normalization merges
+// (same normalized_key) apart from alias-bridge merges (same group_key across
+// different normalized_keys).
+type termVariantJSON struct {
+	Surface       string `json:"surface"`
+	NormalizedKey string `json:"normalized_key"`
+	Count         int    `json:"count"`
+	DocCount      int    `json:"doc_count"`
+}
+
+// toTermPreferenceJSON converts the stored term profile into the show payload,
+// always returning a non-nil slice so the JSON shows an empty array, not null.
+func toTermPreferenceJSON(profile term.Profile) []termPreferenceJSON {
+	out := make([]termPreferenceJSON, 0, len(profile.Groups))
+	for _, group := range profile.Groups {
+		variants := make([]termVariantJSON, 0, len(group.Variants))
+		for _, v := range group.Variants {
+			variants = append(variants, termVariantJSON{
+				Surface:       v.Surface,
+				NormalizedKey: v.NormalizedKey,
+				Count:         v.Count,
+				DocCount:      v.DocCount,
+			})
+		}
+		out = append(out, termPreferenceJSON{
+			GroupKey:         group.GroupKey,
+			PreferredSurface: group.PreferredSurface,
+			DocCount:         group.DocCount,
+			TotalCount:       group.TotalCount,
+			Variants:         variants,
+		})
+	}
+	return out
 }
 
 // recordSources returns the learning sources of a profile, always non-empty for a

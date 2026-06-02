@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/nao1215/omokage/internal/profile"
+	"github.com/nao1215/omokage/internal/term"
 )
 
 // renderExplanationText prints the human-facing detailed report. It leads with
@@ -66,7 +67,7 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 // be read back by an LLM in a revise-and-recheck loop: the high-level (editable)
 // drifts and the low-level fingerprint are kept in separate arrays, each carrying
 // the target value, reference mean and spread, z-score, and fix priority.
-func renderExplanationJSON(w io.Writer, author string, explanation profile.Explanation) error {
+func renderExplanationJSON(w io.Writer, author string, explanation profile.Explanation, warnings []term.Warning) error {
 	high, low := splitDrifts(explanation.Drifts)
 	payload := explanationJSON{
 		Author:         author,
@@ -74,6 +75,7 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 		HighLevelDrift: toDriftJSON(high),
 		LowLevelDrift:  toDriftJSON(low),
 		Segments:       toSegmentJSON(explanation.Segments),
+		TermWarnings:   toTermWarningJSON(warnings),
 	}
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -86,6 +88,45 @@ type explanationJSON struct {
 	HighLevelDrift []featureDriftJSON `json:"high_level_drift"`
 	LowLevelDrift  []featureDriftJSON `json:"low_level_drift"`
 	Segments       []segmentJSON      `json:"segments"`
+	// TermWarnings reports notation deviations (a non-preferred surface in the
+	// draft). It is a separate layer from the similarity score and never affects
+	// it. Always present (empty array, not null) so the shape is stable.
+	TermWarnings []termWarningJSON `json:"term_warnings"`
+}
+
+// termWarningJSON is one notation deviation in `check --format json`. Occurrences
+// is reserved for future line/column reporting and is omitted while only counts
+// are tracked, so adding it later will not change existing fields.
+type termWarningJSON struct {
+	GroupKey         string               `json:"group_key"`
+	PreferredSurface string               `json:"preferred_surface"`
+	UsedSurface      string               `json:"used_surface"`
+	Count            int                  `json:"count"`
+	Occurrences      []termOccurrenceJSON `json:"occurrences,omitempty"`
+}
+
+type termOccurrenceJSON struct {
+	Line   int `json:"line"`
+	Column int `json:"column"`
+}
+
+// toTermWarningJSON converts term warnings into the check payload, always
+// returning a non-nil slice so the JSON shows an empty array rather than null.
+func toTermWarningJSON(warnings []term.Warning) []termWarningJSON {
+	out := make([]termWarningJSON, 0, len(warnings))
+	for _, w := range warnings {
+		warning := termWarningJSON{
+			GroupKey:         w.GroupKey,
+			PreferredSurface: w.PreferredSurface,
+			UsedSurface:      w.UsedSurface,
+			Count:            w.Count,
+		}
+		for _, occ := range w.Occurrences {
+			warning.Occurrences = append(warning.Occurrences, termOccurrenceJSON{Line: occ.Line, Column: occ.Column})
+		}
+		out = append(out, warning)
+	}
+	return out
 }
 
 type featureDriftJSON struct {

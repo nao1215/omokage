@@ -58,6 +58,14 @@ var inlineCodePattern = regexp.MustCompile("`[^`]*`")
 // markers are recognized — backtick (``` … ```) and tilde (~~~ … ~~~) — and a
 // block is closed only by its own marker, so a tilde line inside a backtick
 // block (or vice versa) is treated as content, not a boundary.
+// StripCode removes fenced and inline code from text and returns the remaining
+// prose. It is the exported entry point other packages (e.g. term extraction)
+// use to measure prose only, exactly as the feature extractor does, after
+// normalizing CRLF line endings.
+func StripCode(text string) string {
+	return stripCode(strings.ReplaceAll(text, "\r\n", "\n"))
+}
+
 func stripCode(text string) string {
 	lines := strings.Split(text, "\n")
 	kept := make([]string, 0, len(lines))
