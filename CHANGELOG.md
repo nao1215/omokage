@@ -9,6 +9,22 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ### Added
 
+- Author resolution for `check` (and `show`): with a single trained profile
+  `--author` is now optional, and a `default_author` setting (or `train
+  --default`) picks the author when several exist. Two or more profiles with no
+  default is a clear error that lists the candidates rather than guessing.
+- Profile management commands so `profiles/*.db` never has to be edited by hand:
+  `show` (how a profile was trained, with `--format json`), `rename` (keeps the
+  trained data, refuses to overwrite), and `remove` (clears the default if it
+  pointed there).
+- A per-user global store alongside the existing project-local model:
+  `omokage init --global`, the `OMOKAGE_HOME` environment variable, and the
+  `--global`, `--config PATH`, and `--profile-dir PATH` flags. A local project
+  always wins inside its tree; the global store is the fallback when none is
+  found.
+- `list --long` adds a table with each author's trained_at, file count, and
+  source directory, marking the default; plain `list` still prints bare names.
+- `check --score-only` prints just the integer similarity, for shell scripts.
 - `check --explain`: a prioritized, numeric drift report that leads with the
   high-level, editable features (register, script balance, sentence and
   paragraph shape) and shows each one's target value, the trained mean and

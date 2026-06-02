@@ -17,9 +17,12 @@ OMOKAGE_BIN="${OMOKAGE_BIN:-$PROJECT_ROOT/omokage}"
 export OMOKAGE_BIN
 
 # omokage runs the built binary inside the current project directory ($WORK) so
-# that omokage.toml, profiles/, and relative fixture paths resolve there.
+# that omokage.toml, profiles/, and relative fixture paths resolve there. Unless a
+# test sets OMOKAGE_HOME itself, it points at a path that does not exist, so the
+# global-store fallback stays inert and the tests never touch a real per-user
+# store.
 omokage() {
-  ( cd "$WORK" && "$OMOKAGE_BIN" "$@" )
+  ( cd "$WORK" && OMOKAGE_HOME="${OMOKAGE_HOME:-$WORK/.omokage-global-absent}" "$OMOKAGE_BIN" "$@" )
 }
 
 # similarity prints just the integer percentage from a check/diff invocation.

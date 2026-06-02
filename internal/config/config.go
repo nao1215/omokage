@@ -13,10 +13,19 @@ type Config struct {
 	Project  Project
 	Features Features
 	Storage  Storage
+	Defaults Defaults
 }
 
 type Project struct {
 	Name string
+}
+
+// Defaults holds optional, scope-wide preferences. Author is the author profile
+// used by `check`/`show` when --author is omitted; it is consulted before the
+// single-profile auto-select and lets a multi-profile scope pick a sensible
+// default without forcing --author on every run.
+type Defaults struct {
+	Author string
 }
 
 type Features struct {
@@ -109,6 +118,14 @@ func Parse(data []byte) (Config, error) {
 				}
 				cfg.Project.Name = parsed
 			}
+		case "defaults":
+			if key == "default_author" {
+				parsed, err := parseString(value)
+				if err != nil {
+					return Config{}, err
+				}
+				cfg.Defaults.Author = parsed
+			}
 		case "features":
 			parsed, err := strconv.ParseBool(value)
 			if err != nil {
@@ -173,6 +190,10 @@ func (c Config) String() string {
 	return fmt.Sprintf(`[project]
 name = %q
 
+[defaults]
+# author used by `+"`check`"+`/`+"`show`"+` when --author is omitted (optional).
+default_author = %q
+
 [features]
 sentence_length = %t
 sentence_length_variance = %t
@@ -195,6 +216,7 @@ profile_dir = %q
 cache_dir = %q
 `,
 		c.Project.Name,
+		c.Defaults.Author,
 		c.Features.SentenceLength,
 		c.Features.SentenceLengthVariance,
 		c.Features.PunctuationFrequency,

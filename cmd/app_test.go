@@ -253,10 +253,21 @@ func TestCheckRejectsUnknownFormat(t *testing.T) {
 
 func runApp(t *testing.T, workDir string, args ...string) (int, string, string) {
 	t.Helper()
+	// Point the global store at a path that does not exist, so tests never read or
+	// write a real per-user store and the global fallback stays inert unless a test
+	// opts in via runAppHome.
+	return runAppHome(t, workDir, filepath.Join(workDir, "__omokage_no_global__"), args...)
+}
+
+// runAppHome runs the app with an explicit global store directory, for the
+// global-mode and local/global-precedence tests.
+func runAppHome(t *testing.T, workDir, home string, args ...string) (int, string, string) {
+	t.Helper()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	app := NewApp(&stdout, &stderr, workDir)
+	app.home = home
 	code := app.Run(args)
 	return code, stdout.String(), stderr.String()
 }

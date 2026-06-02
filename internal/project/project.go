@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/nao1215/omokage/internal/config"
@@ -98,25 +97,5 @@ func ProfilePath(root string, cfg config.Config, author string) (string, error) 
 }
 
 func ListProfiles(root string, cfg config.Config) ([]string, error) {
-	profileDir := filepath.Join(root, cfg.Storage.ProfileDir)
-	entries, err := os.ReadDir(profileDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	authors := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasSuffix(strings.ToLower(name), ".db") {
-			authors = append(authors, strings.TrimSuffix(name, filepath.Ext(name)))
-		}
-	}
-	sort.Strings(authors)
-	return authors, nil
+	return listProfilesInDir(filepath.Join(root, cfg.Storage.ProfileDir))
 }

@@ -142,10 +142,13 @@ Describe 'omokage check, diff, and list'
       The stderr should be present
     End
 
-    It 'requires the author flag'
+    It 'errors when the author is ambiguous'
+      # With two trained profiles and no default_author, a bare check must not
+      # guess: it reports the candidates and asks for --author.
       When run omokage check ja/keep.md
       The status should be failure
-      The stderr should include 'Usage: omokage check'
+      The stderr should include 'multiple profiles'
+      The stderr should include 'ja_me'
     End
   End
 

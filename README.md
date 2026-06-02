@@ -50,10 +50,11 @@ $ omokage train --author me examples/posts
 Trained author "me" from 8 files.
 ```
 
-Check whether a draft still reads like that author.
+Check whether a draft still reads like that author. With a single trained
+profile you can drop `--author` entirely — omokage selects the only one.
 
 ```shell
-$ omokage check --author me examples/draft-keeps-voice.md
+$ omokage check examples/draft-keeps-voice.md
 Author: me
 Similarity: 73%
 
@@ -110,6 +111,70 @@ Paragraphs that drift most:
 ```
 
 ![explain demo](./doc/img/explain.gif)
+
+## Choosing the author
+
+`check` and `show` resolve the author in this order, so single-author use needs
+no flags and multi-author use stays unambiguous:
+
+1. `--author NAME`, if given;
+2. otherwise `default_author` from the config;
+3. otherwise the only trained profile;
+4. otherwise it is an error — zero profiles, or two or more with no default,
+   never silently picks one.
+
+Set a default without editing the config by hand:
+
+```shell
+$ omokage train --author me --default examples/posts
+```
+
+## Managing profiles
+
+You never have to touch `profiles/*.db` directly.
+
+```shell
+$ omokage list                 # bare names, one per line (pipe-friendly)
+me
+$ omokage list --long          # trained_at, file count, and source directory
+AUTHOR        TRAINED            FILES  SOURCE
+me (default)  2026-06-01 09:14   8      /home/me/writing/posts
+$ omokage show --author me      # how a profile was trained (--format json too)
+$ omokage rename --author me --to watashi
+$ omokage remove --author watashi
+```
+
+`rename` keeps the trained data and refuses to overwrite an existing author;
+`remove` clears `default_author` if it pointed at the removed profile.
+
+## Local and global stores
+
+By default omokage looks for an `omokage.toml` by walking up from the current
+directory — a project-local store, good for keeping separate writing contexts
+apart. For a single voice you can use anywhere, create a per-user store instead:
+
+```shell
+$ omokage init --global                       # under $OMOKAGE_HOME or ~/.config/omokage
+$ omokage train --global --author me ~/writing
+$ cd ~/anywhere && omokage check draft.md      # falls back to the global store
+```
+
+When both exist, a local project always wins inside its directory tree; the
+global store is the fallback used only when no local project is found. `--global`
+forces the global store from anywhere, and `--config PATH` / `--profile-dir PATH`
+point omokage at a specific store.
+
+## Scripting
+
+`--score-only` prints just the integer similarity, for shell pipelines:
+
+```shell
+$ score=$(omokage check --score-only draft.md)
+$ [ "$score" -ge 70 ] && echo "close enough"
+```
+
+Use `--format json` (with `check` or `show`) when a tool or LLM needs the full
+structured report instead of a single number.
 
 ## How it scores
 
