@@ -99,7 +99,7 @@ func (a *App) Run(args []string) int {
 		// `omokage help` is the root help; `omokage help <command>` is the same as
 		// `omokage <command> --help`, so users can reach a command's usage either way.
 		if args[0] == "help" && len(args) > 1 {
-			return a.runHelp(args[1])
+			return a.runHelp(args[1:])
 		}
 		a.printRootHelp()
 		return 0
@@ -129,17 +129,32 @@ func (a *App) Run(args []string) int {
 	}
 }
 
-// runHelp implements `omokage help <command>`. For a command that has a usage
-// screen it dispatches to `<command> --help`, so the two spellings stay identical
-// in content and exit code. An unknown name fails the same way the root dispatcher
-// does, rather than silently falling back to the root help.
-func (a *App) runHelp(name string) int {
+// runHelp implements `omokage help <command> [args...]`. For a command that has a
+// usage screen it dispatches to `<command> [args...] --help`, forwarding any
+// trailing tokens so the two spellings stay identical in content and exit code:
+// `omokage help check extra` is rejected exactly as `omokage check extra --help`
+// would be, instead of silently dropping the extra token and hiding a typo or a
+// wrapper bug. An unknown name fails the same way the root dispatcher does, rather
+// than silently falling back to the root help. args is the tokens after "help" and
+// always has at least one element (the caller handles bare "help").
+func (a *App) runHelp(args []string) int {
+	name := args[0]
+	rest := args[1:]
 	switch name {
 	case "init", "train", "check", "diff", "list", "show", "remove", "rename":
-		return a.Run([]string{name, "--help"})
+		forwarded := make([]string, 0, len(args)+1)
+		forwarded = append(forwarded, args...)
+		forwarded = append(forwarded, "--help")
+		return a.Run(forwarded)
 	case "help", "version":
-		// These have no flags and no per-command usage screen; the root help already
-		// documents them, so point there with a success exit.
+		// These have no flags and no per-command usage screen. Extra tokens after them
+		// are meaningless, so reject them rather than ignore them; a bare name points
+		// at the root help, which documents both.
+		if len(rest) > 0 {
+			writef(a.stderr, "%q takes no arguments\n\n", name)
+			a.printRootHelp()
+			return 1
+		}
 		a.printRootHelp()
 		return 0
 	default:
@@ -332,7 +347,7 @@ func (a *App) runTrain(args []string) int {
 
 	record := profile.Record{
 		Author:       *author,
-		SourceDir:    sources[0],
+		SourceDir:    legacySourceDir(sources),
 		Sources:      sources,
 		TrainedAt:    time.Now().UTC(),
 		FileCount:    len(files),
@@ -692,11 +707,16 @@ func (a *App) runShow(args []string) int {
 	writef(a.stdout, "Trained: %s\n", record.TrainedAt.Format("2006-01-02 15:04:05 MST"))
 	writef(a.stdout, "Files: %d\n", record.FileCount)
 	// One input keeps the familiar single "Source:" line; several switch to a
-	// numbered "Sources (N):" block so the full provenance is visible.
+	// numbered "Sources (N):" block so the full provenance is visible. The line is
+	// driven by the sources list, not SourceDir, so a single-file profile shows the
+	// file it was trained from (SourceDir is reserved for an actual directory).
 	sources := recordSources(record)
-	if len(sources) <= 1 {
+	switch len(sources) {
+	case 0:
 		writef(a.stdout, "Source: %s\n", record.SourceDir)
-	} else {
+	case 1:
+		writef(a.stdout, "Source: %s\n", sources[0])
+	default:
 		writef(a.stdout, "Sources (%d):\n", len(sources))
 		for _, source := range sources {
 			writef(a.stdout, "  - %s\n", source)
@@ -1012,7 +1032,9 @@ func printFlagDefaults(w io.Writer, flagSet *flag.FlagSet) {
 // file passed directly with an unsupported extension. De-duplication runs at two
 // levels: the same input given twice collapses to one source, and the same file
 // reached through two inputs (e.g. a directory and a file inside it) is learned
-// once, keyed by its normalized absolute path.
+// once. Both are keyed by the resolved real path (symlinks followed), so an alias
+// and its target — a.md and alias.md -> a.md — are recognized as one file and the
+// learned distribution is never skewed by counting it twice.
 func gatherTrainingInputs(workDir string, inputs []string) (sources, files []string, err error) {
 	seenInput := make(map[string]bool, len(inputs))
 	for _, raw := range inputs {
@@ -1033,8 +1055,9 @@ func gatherTrainingInputs(workDir string, inputs []string) (sources, files []str
 		if !info.IsDir() && !feature.IsSupportedFile(abs) {
 			return nil, nil, fmt.Errorf("unsupported file %s: omokage learns only .md and .txt files", raw)
 		}
-		if !seenInput[abs] {
-			seenInput[abs] = true
+		key := realPath(abs)
+		if !seenInput[key] {
+			seenInput[key] = true
 			sources = append(sources, abs)
 		}
 	}
@@ -1046,14 +1069,44 @@ func gatherTrainingInputs(workDir string, inputs []string) (sources, files []str
 			return nil, nil, collectErr
 		}
 		for _, file := range collected {
-			if !seenFile[file] {
-				seenFile[file] = true
+			key := realPath(file)
+			if !seenFile[key] {
+				seenFile[key] = true
 				files = append(files, file)
 			}
 		}
 	}
 	sort.Strings(files)
 	return sources, files, nil
+}
+
+// legacySourceDir returns the value stored in the backward-compatible source_dir
+// field. It is the directory a profile was trained from only when there is exactly
+// one input and that input is a directory; otherwise it is empty. This keeps
+// source_dir meaning "a directory" for consumers written before the sources list
+// existed, rather than silently putting a file path there when training from a
+// single file or several inputs. The complete provenance always lives in Sources.
+func legacySourceDir(sources []string) string {
+	if len(sources) != 1 {
+		return ""
+	}
+	info, err := os.Stat(sources[0])
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+	return sources[0]
+}
+
+// realPath resolves a path to its canonical form for de-duplication, following
+// symlinks so two names for one file collapse to a single key. It falls back to
+// the given path when resolution fails (e.g. a broken link or a platform without
+// symlink support), which at worst leaves the path de-duplicated by its literal
+// form — the previous behavior — rather than dropping it.
+func realPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 // looksLikeURL reports whether an input is a URL rather than a local path, so

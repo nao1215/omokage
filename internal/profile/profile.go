@@ -15,10 +15,11 @@ import (
 // the metadata describing how it was trained.
 type Record struct {
 	Author string
-	// SourceDir is the primary learning source. For a single input it is that
-	// input; for several it is the first one. It is kept as a single field for
-	// backward compatibility with profiles trained before multi-input support and
-	// with the compact `list --long` SOURCE column. Sources carries the full list.
+	// SourceDir is the directory a profile was trained from, kept for backward
+	// compatibility with profiles and consumers that predate multi-input support.
+	// It is set only when training from exactly one directory; for a single file or
+	// several inputs it is empty, so a consumer reading it never receives a file
+	// path where it expects a directory. The full provenance lives in Sources.
 	SourceDir string
 	// Sources lists every input the profile was trained from (directories and
 	// individual files), as normalized absolute paths, de-duplicated. It is the

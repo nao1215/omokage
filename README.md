@@ -79,8 +79,10 @@ The rules:
   the current directory. omokage never touches the network.
 - **`.md` / `.txt` only.** A file passed directly with any other extension is an
   error. Inside a directory, unsupported files are simply skipped.
-- **De-duplicated.** Passing the same file twice — directly, or via a directory
-  that contains it — learns it once, keyed by its real path.
+- **De-duplicated by real path.** Passing the same file twice — directly, via a
+  directory that contains it, or through a symlink (`alias.md` -> `a.md`) — learns
+  it once. De-duplication follows symlinks and resolves the real path, so an alias
+  and its target never count as two and the learned style is not skewed.
 - **All-or-nothing.** If any single input is invalid, `train` reports that exact
   input by name and trains nothing, so you can drop the offending argument and
   re-run. Nothing is saved on a partial failure.
@@ -209,8 +211,11 @@ Sentences: 142
 Characters: 5210
 ```
 
-`show --format json` carries the same provenance: a `source_dir` field (the first
-source, kept for compatibility) and a `sources` array with every input.
+`show --format json` carries the same provenance in two fields. `sources` is the
+full list of inputs and is what you should read. `source_dir` is kept only for
+backward compatibility with older profiles and tools: it holds the training
+directory when an author was trained from a single directory, and is empty
+otherwise (a single file, or several inputs) — it never contains a file path.
 
 `rename` keeps the trained data and refuses to overwrite an existing author;
 `remove` clears `default_author` if it pointed at the removed profile.

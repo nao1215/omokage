@@ -126,5 +126,13 @@ Describe 'omokage CLI surface'
       The stderr should include 'unknown command'
       The stdout should include 'Commands:'
     End
+
+    It 'rejects extra arguments after help <command> instead of dropping them'
+      # `help check extra` must fail like `check extra --help`, not silently ignore
+      # the trailing token.
+      When run "$OMOKAGE_BIN" help check extra
+      The status should be failure
+      The stderr should be present
+    End
   End
 End

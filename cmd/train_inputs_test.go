@@ -103,6 +103,54 @@ func TestGatherTrainingInputsRejectsMissingPath(t *testing.T) {
 	}
 }
 
+func TestGatherTrainingInputsDeduplicatesSymlink(t *testing.T) {
+	t.Parallel()
+
+	work := t.TempDir()
+	target := filepath.Join(work, "a.md")
+	writeInputFile(t, target, "alpha")
+	alias := filepath.Join(work, "alias.md")
+	if err := os.Symlink(target, alias); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	// a.md and alias.md -> a.md are the same real file; passing both must learn it
+	// once, keyed by the resolved real path, so the distribution is not skewed.
+	sources, files, err := gatherTrainingInputs(work, []string{"a.md", "alias.md"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected the symlink alias to collapse to 1 file, got %d: %v", len(files), files)
+	}
+	if len(sources) != 1 {
+		t.Fatalf("expected 1 source after real-path dedup, got %d: %v", len(sources), sources)
+	}
+}
+
+func TestLegacySourceDir(t *testing.T) {
+	t.Parallel()
+
+	work := t.TempDir()
+	dir := filepath.Join(work, "posts")
+	writeInputFile(t, filepath.Join(dir, "a.md"), "alpha")
+	file := filepath.Join(work, "b.md")
+	writeInputFile(t, file, "beta")
+
+	// A single directory input keeps source_dir meaningful (a directory).
+	if got := legacySourceDir([]string{dir}); got != dir {
+		t.Fatalf("single directory: got %q, want %q", got, dir)
+	}
+	// A single file input must not put a file path into source_dir.
+	if got := legacySourceDir([]string{file}); got != "" {
+		t.Fatalf("single file: expected empty source_dir, got %q", got)
+	}
+	// Several inputs leave source_dir empty; provenance lives in Sources.
+	if got := legacySourceDir([]string{dir, file}); got != "" {
+		t.Fatalf("multiple inputs: expected empty source_dir, got %q", got)
+	}
+}
+
 func TestGatherTrainingInputsRejectsURL(t *testing.T) {
 	t.Parallel()
 
@@ -188,5 +236,63 @@ func TestTrainMultipleInputsShowProvenance(t *testing.T) {
 	}
 	if len(payload.Sources) != 2 {
 		t.Fatalf("expected 2 sources in json, got %d: %v", len(payload.Sources), payload.Sources)
+	}
+}
+
+// Training from a single file must not leak a file path into the source_dir field
+// (reserved for an actual directory); the file shows up only in sources and on the
+// human-readable "Source:" line.
+func TestTrainSingleFileSourceDirStaysEmpty(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir()
+	writeTestFile(t, filepath.Join(workDir, "draft.md"),
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。")
+
+	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
+		t.Fatalf("init failed: %s", stderr)
+	}
+	if code, _, stderr := runApp(t, workDir, "train", "--author", "me", "draft.md"); code != 0 {
+		t.Fatalf("train failed: %s", stderr)
+	}
+
+	code, stdout, stderr := runApp(t, workDir, "show", "--author", "me", "--format", "json")
+	if code != 0 {
+		t.Fatalf("show json failed: stderr=%q", stderr)
+	}
+	var payload profileSummaryJSON
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("show json invalid: %v\n%s", err, stdout)
+	}
+	if payload.SourceDir != "" {
+		t.Fatalf("expected empty source_dir for a single file, got %q", payload.SourceDir)
+	}
+	if len(payload.Sources) != 1 || !strings.HasSuffix(payload.Sources[0], "draft.md") {
+		t.Fatalf("expected the file in sources, got %v", payload.Sources)
+	}
+
+	// The human-readable view still names the file under "Source:".
+	_, text, _ := runApp(t, workDir, "show", "--author", "me")
+	if !strings.Contains(text, "Source: ") || !strings.Contains(text, "draft.md") {
+		t.Fatalf("expected the file on the Source line, got:\n%s", text)
+	}
+}
+
+func TestHelpRejectsExtraArguments(t *testing.T) {
+	t.Parallel()
+
+	// `help check extra` must fail exactly as `check extra --help` would, not drop
+	// the trailing token and succeed.
+	code, _, stderr := runApp(t, t.TempDir(), "help", "check", "extra")
+	if code == 0 {
+		t.Fatalf("expected a non-zero exit for trailing tokens after 'help check', got 0")
+	}
+	if stderr == "" {
+		t.Fatal("expected an error on stderr")
+	}
+
+	// A clean `help check` still mirrors `check --help` and succeeds.
+	if code, _, _ := runApp(t, t.TempDir(), "help", "check"); code != 0 {
+		t.Fatalf("expected 'help check' to succeed, got exit %d", code)
 	}
 }

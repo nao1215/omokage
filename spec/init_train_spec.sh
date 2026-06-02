@@ -72,6 +72,14 @@ Describe 'omokage init and train'
       The output should include 'Trained author "me" from 8 files'
     End
 
+    It 'does not double-count a symlink and its target'
+      # alias.md points at keep.md; the same real file must be learned once.
+      ln -s "$WORK/ja/keep.md" "$WORK/ja/alias.md"
+      When run omokage train --author me ja/keep.md ja/alias.md
+      The status should be success
+      The output should include 'Trained author "me" from 1 file'
+    End
+
     It 'requires the author flag'
       When run omokage train ja/posts
       The status should be failure
