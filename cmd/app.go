@@ -63,6 +63,7 @@ func (a *App) runInit(args []string) int {
 	flagSet := newFlagSet("init", a.stderr)
 	name := flagSet.String("name", filepath.Base(a.workDir), "project name")
 	flagSet.Usage = func() {
+		writef(a.stderr, "Create an omokage project in the current directory (omokage.toml, profiles/, cache/).\n")
 		writef(a.stderr, "Usage: omokage init [--name NAME]\n")
 		flagSet.PrintDefaults()
 	}
@@ -91,6 +92,7 @@ func (a *App) runTrain(args []string) int {
 	flagSet := newFlagSet("train", a.stderr)
 	author := flagSet.String("author", "", "author profile name")
 	flagSet.Usage = func() {
+		writef(a.stderr, "Learn an author's style from every .md and .txt file in DIRECTORY.\n")
 		writef(a.stderr, "Usage: omokage train --author AUTHOR DIRECTORY\n")
 		flagSet.PrintDefaults()
 	}
@@ -157,6 +159,7 @@ func (a *App) runCheck(args []string) int {
 	flagSet := newFlagSet("check", a.stderr)
 	author := flagSet.String("author", "", "author profile name")
 	flagSet.Usage = func() {
+		writef(a.stderr, "Score how closely FILE matches AUTHOR's trained style, from 0 to 100.\n")
 		writef(a.stderr, "Usage: omokage check --author AUTHOR FILE\n")
 		flagSet.PrintDefaults()
 	}
@@ -209,6 +212,7 @@ func (a *App) runCheck(args []string) int {
 func (a *App) runDiff(args []string) int {
 	flagSet := newFlagSet("diff", a.stderr)
 	flagSet.Usage = func() {
+		writef(a.stderr, "Compare two files directly and report their stylistic similarity, no profile needed.\n")
 		writef(a.stderr, "Usage: omokage diff FILE_A FILE_B\n")
 	}
 	if err := flagSet.Parse(args); err != nil {
@@ -259,6 +263,7 @@ func (a *App) runDiff(args []string) int {
 func (a *App) runList(args []string) int {
 	flagSet := newFlagSet("list", a.stderr)
 	flagSet.Usage = func() {
+		writef(a.stderr, "List the author profiles trained in this project.\n")
 		writef(a.stderr, "Usage: omokage list\n")
 	}
 	if err := flagSet.Parse(args); err != nil {
@@ -299,13 +304,20 @@ func (a *App) defaultOrProjectConfig() (config.Config, error) {
 
 func (a *App) printRootHelp() {
 	writeLine(a.stdout, "omokage analyzes writing style and compares it against learned author profiles.")
+	writeLine(a.stdout, "It works on Japanese and English text and keeps each profile in a local SQLite database.")
 	writeLine(a.stdout)
 	writeLine(a.stdout, "Usage:")
-	writeLine(a.stdout, "  omokage init [--name NAME]")
-	writeLine(a.stdout, "  omokage train --author AUTHOR DIRECTORY")
-	writeLine(a.stdout, "  omokage check --author AUTHOR FILE")
-	writeLine(a.stdout, "  omokage diff FILE_A FILE_B")
-	writeLine(a.stdout, "  omokage list")
+	writeLine(a.stdout, "  omokage <command> [arguments]")
+	writeLine(a.stdout)
+	writeLine(a.stdout, "Commands:")
+	writeLine(a.stdout, "  init     Create an omokage project here (omokage.toml, profiles/, cache/).")
+	writeLine(a.stdout, "  train    Learn an author's style from a directory of .md and .txt files.")
+	writeLine(a.stdout, "  check    Score how closely a file matches a trained author, from 0 to 100.")
+	writeLine(a.stdout, "  diff     Compare two files directly, without a trained profile.")
+	writeLine(a.stdout, "  list     List the author profiles trained in this project.")
+	writeLine(a.stdout, "  version  Print the omokage version.")
+	writeLine(a.stdout)
+	writeLine(a.stdout, `Run "omokage <command> --help" to see a command's arguments.`)
 }
 
 func newFlagSet(name string, output io.Writer) *flag.FlagSet {
