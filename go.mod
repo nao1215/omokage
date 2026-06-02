@@ -1,4 +1,4 @@
-module github.com/nao1215/dyer
+module github.com/nao1215/omokage
 
 go 1.25.0
 

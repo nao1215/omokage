@@ -399,7 +399,7 @@ func splitWords(text string) []string {
 // sentenceEndingStats counts Japanese sentence-ending forms. The contrast
 // between the polite register (敬体: です・ます) and the plain register
 // (常体: だ・である) is one of the strongest stylistic markers in Japanese
-// writing, and a sharp shift between the two is exactly the kind of drift dyer
+// writing, and a sharp shift between the two is exactly the kind of drift omokage
 // aims to surface.
 func sentenceEndingStats(text string) (polite int, plain int) {
 	politeForms := []string{"ます", "です", "ました", "でした", "ません"}

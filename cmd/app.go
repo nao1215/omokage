@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nao1215/dyer/internal/config"
-	"github.com/nao1215/dyer/internal/feature"
-	"github.com/nao1215/dyer/internal/profile"
-	"github.com/nao1215/dyer/internal/project"
-	"github.com/nao1215/dyer/internal/storage"
+	"github.com/nao1215/omokage/internal/config"
+	"github.com/nao1215/omokage/internal/feature"
+	"github.com/nao1215/omokage/internal/profile"
+	"github.com/nao1215/omokage/internal/project"
+	"github.com/nao1215/omokage/internal/storage"
 )
 
 type App struct {
@@ -50,7 +50,7 @@ func (a *App) Run(args []string) int {
 	case "list":
 		return a.runList(args[1:])
 	case "version", "-v", "--version":
-		writeLine(a.stdout, "dyer dev")
+		writeLine(a.stdout, "omokage dev")
 		return 0
 	default:
 		writef(a.stderr, "unknown command: %s\n\n", args[0])
@@ -63,7 +63,7 @@ func (a *App) runInit(args []string) int {
 	flagSet := newFlagSet("init", a.stderr)
 	name := flagSet.String("name", filepath.Base(a.workDir), "project name")
 	flagSet.Usage = func() {
-		writef(a.stderr, "Usage: dyer init [--name NAME]\n")
+		writef(a.stderr, "Usage: omokage init [--name NAME]\n")
 		flagSet.PrintDefaults()
 	}
 	if err := flagSet.Parse(args); err != nil {
@@ -80,7 +80,7 @@ func (a *App) runInit(args []string) int {
 		return 1
 	}
 
-	writeLine(a.stdout, "Initialized dyer project.")
+	writeLine(a.stdout, "Initialized omokage project.")
 	writef(a.stdout, "Config: %s\n", filepath.Join(a.workDir, project.ConfigFileName))
 	writef(a.stdout, "Profiles: %s\n", filepath.Join(a.workDir, cfg.Storage.ProfileDir))
 	writef(a.stdout, "Cache: %s\n", filepath.Join(a.workDir, cfg.Storage.CacheDir))
@@ -91,7 +91,7 @@ func (a *App) runTrain(args []string) int {
 	flagSet := newFlagSet("train", a.stderr)
 	author := flagSet.String("author", "", "author profile name")
 	flagSet.Usage = func() {
-		writef(a.stderr, "Usage: dyer train --author AUTHOR DIRECTORY\n")
+		writef(a.stderr, "Usage: omokage train --author AUTHOR DIRECTORY\n")
 		flagSet.PrintDefaults()
 	}
 	if err := flagSet.Parse(args); err != nil {
@@ -157,7 +157,7 @@ func (a *App) runCheck(args []string) int {
 	flagSet := newFlagSet("check", a.stderr)
 	author := flagSet.String("author", "", "author profile name")
 	flagSet.Usage = func() {
-		writef(a.stderr, "Usage: dyer check --author AUTHOR FILE\n")
+		writef(a.stderr, "Usage: omokage check --author AUTHOR FILE\n")
 		flagSet.PrintDefaults()
 	}
 	if err := flagSet.Parse(args); err != nil {
@@ -209,7 +209,7 @@ func (a *App) runCheck(args []string) int {
 func (a *App) runDiff(args []string) int {
 	flagSet := newFlagSet("diff", a.stderr)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Usage: dyer diff FILE_A FILE_B\n")
+		writef(a.stderr, "Usage: omokage diff FILE_A FILE_B\n")
 	}
 	if err := flagSet.Parse(args); err != nil {
 		return 1
@@ -248,8 +248,8 @@ func (a *App) runDiff(args []string) int {
 	}
 
 	renderComparison(a.stdout, renderOptions{
-		leftPath:    leftPath,
-		rightPath:   rightPath,
+		leftPath:    flagSet.Arg(0),
+		rightPath:   flagSet.Arg(1),
 		comparison:  profile.Compare(leftMetrics, rightMetrics, cfg.Features),
 		showSources: true,
 	})
@@ -259,7 +259,7 @@ func (a *App) runDiff(args []string) int {
 func (a *App) runList(args []string) int {
 	flagSet := newFlagSet("list", a.stderr)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Usage: dyer list\n")
+		writef(a.stderr, "Usage: omokage list\n")
 	}
 	if err := flagSet.Parse(args); err != nil {
 		return 1
@@ -298,14 +298,14 @@ func (a *App) defaultOrProjectConfig() (config.Config, error) {
 }
 
 func (a *App) printRootHelp() {
-	writeLine(a.stdout, "dyer analyzes writing style and compares it against learned author profiles.")
+	writeLine(a.stdout, "omokage analyzes writing style and compares it against learned author profiles.")
 	writeLine(a.stdout)
 	writeLine(a.stdout, "Usage:")
-	writeLine(a.stdout, "  dyer init [--name NAME]")
-	writeLine(a.stdout, "  dyer train --author AUTHOR DIRECTORY")
-	writeLine(a.stdout, "  dyer check --author AUTHOR FILE")
-	writeLine(a.stdout, "  dyer diff FILE_A FILE_B")
-	writeLine(a.stdout, "  dyer list")
+	writeLine(a.stdout, "  omokage init [--name NAME]")
+	writeLine(a.stdout, "  omokage train --author AUTHOR DIRECTORY")
+	writeLine(a.stdout, "  omokage check --author AUTHOR FILE")
+	writeLine(a.stdout, "  omokage diff FILE_A FILE_B")
+	writeLine(a.stdout, "  omokage list")
 }
 
 func newFlagSet(name string, output io.Writer) *flag.FlagSet {

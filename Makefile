@@ -1,6 +1,6 @@
 .PHONY: build test lint clean tools help
 
-APP         = dyer
+APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 GO          = go
 GO_BUILD    = $(GO) build

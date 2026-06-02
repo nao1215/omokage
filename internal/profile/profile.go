@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/nao1215/dyer/internal/config"
-	"github.com/nao1215/dyer/internal/feature"
+	"github.com/nao1215/omokage/internal/config"
+	"github.com/nao1215/omokage/internal/feature"
 )
 
 // Record is a persisted author profile: the learned feature distribution plus
@@ -204,7 +204,10 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 	}
 
 	results := make([]scored, 0, len(featureSpecs))
-	total := 0.0
+	registerDist := 0.0
+	registerCount := 0
+	otherDist := 0.0
+	otherCount := 0
 	for _, spec := range featureSpecs {
 		if !spec.enabled(flags) {
 			continue
@@ -222,7 +225,13 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		if spec.isRatio {
 			distance = math.Min(1, math.Abs(left-right))
 		}
-		total += distance
+		if registerLabels[spec.label] {
+			registerDist += distance
+			registerCount++
+		} else {
+			otherDist += distance
+			otherCount++
+		}
 		results = append(results, scored{
 			label:     spec.label,
 			distance:  distance,
@@ -230,6 +239,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		})
 	}
 
+	functionWordDist := 0.0
+	functionWordCount := 0
 	if flags.LexicalFrequency {
 		for _, word := range feature.LexicalVocabulary() {
 			left := reference.LexicalFrequencies[word]
@@ -240,7 +251,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 			// Function-word frequencies are tiny absolute numbers, so the raw gap is
 			// scaled to land on the same [0,1] distance footing as the ratio features.
 			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
-			total += distance
+			functionWordDist += distance
+			functionWordCount++
 			results = append(results, scored{
 				label:     fmt.Sprintf("function word %q", word),
 				distance:  distance,
@@ -249,6 +261,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 	}
 
+	ngramDist := 0.0
+	ngramCount := 0
 	if flags.CharNgramFrequency {
 		seen := make(map[string]struct{}, len(reference.CharNgrams)+len(target.CharNgrams))
 		for ngram := range reference.CharNgrams {
@@ -264,7 +278,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 				continue
 			}
 			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
-			total += distance
+			ngramDist += distance
+			ngramCount++
 			results = append(results, scored{
 				label:     fmt.Sprintf("character n-gram %q", ngram),
 				distance:  distance,
@@ -273,11 +288,20 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 	}
 
-	if len(results) == 0 {
+	if registerCount+otherCount+functionWordCount+ngramCount == 0 {
 		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
 	}
 
-	similarity := clampPercent(int(math.Round((1 - total/float64(len(results))) * 100)))
+	// Combine the groups the same way Score does so the diff stays consistent with
+	// check: averaging within each group first keeps the many character n-grams
+	// from drowning out a register difference between the two documents.
+	drift := combineCompareDrift(groupDrift{
+		register:     meanOf(registerDist, registerCount),
+		other:        meanOf(otherDist, otherCount),
+		functionWord: meanOf(functionWordDist, functionWordCount),
+		ngram:        meanOf(ngramDist, ngramCount),
+	})
+	similarity := clampPercent(int(math.Round((1 - drift) * 100)))
 
 	sort.SliceStable(results, func(i int, j int) bool {
 		return results[i].distance > results[j].distance
@@ -373,6 +397,29 @@ func combineDrift(g groupDrift) float64 {
 		registerExcess = 0
 	}
 	return lexical + registerWeight*registerExcess + otherStructWeight*g.other
+}
+
+// registerCompareWeight is how much a register difference between two documents
+// contributes to the diff drift. Unlike Score there is no learned distribution,
+// so there is no tolerance hinge: a register difference between two specific
+// documents is taken at face value and weighted heavily, since it is one of the
+// clearest stylistic divergences a reader notices.
+const (
+	registerCompareWeight = 0.6
+	// otherCompareWeight is larger than otherStructWeight: a direct document
+	// comparison has no authorship distribution to lean on, so structural
+	// differences (layout, sentence length, punctuation) are themselves a
+	// meaningful part of how two documents differ, not just noise.
+	otherCompareWeight = 0.34
+)
+
+// combineCompareDrift mirrors combineDrift for the distribution-free diff path.
+// The lexical fingerprint leads (the equal-weight mean of the function-word and
+// n-gram distances), a register difference is added with a fixed weight, and the
+// remaining structural features contribute a moderate share.
+func combineCompareDrift(g groupDrift) float64 {
+	lexical := meanOfPresent(g.functionWord, g.ngram)
+	return lexical + registerCompareWeight*g.register + otherCompareWeight*g.other
 }
 
 // meanOfPresent averages the sub-signals that are actually present. A sub-signal

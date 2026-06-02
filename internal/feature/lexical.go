@@ -5,7 +5,7 @@ import "strings"
 // englishFunctionWords is a closed-class list of high-frequency English words.
 // Function-word frequencies are the canonical signal for authorship attribution
 // (Burrows's Delta): they are used unconsciously, vary little with topic, and
-// differ measurably between authors. They give dyer a language-independent
+// differ measurably between authors. They give omokage a language-independent
 // fingerprint on top of the Japanese-centric script and register features.
 var englishFunctionWords = []string{
 	"the", "of", "and", "to", "a", "in", "that", "is", "it", "for", "as", "was",

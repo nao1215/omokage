@@ -25,7 +25,7 @@ func TestAppLifecycle(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("init failed: stdout=%q stderr=%q", stdout, stderr)
 	}
-	if !strings.Contains(stdout, "Initialized dyer project.") {
+	if !strings.Contains(stdout, "Initialized omokage project.") {
 		t.Fatalf("unexpected init stdout: %q", stdout)
 	}
 

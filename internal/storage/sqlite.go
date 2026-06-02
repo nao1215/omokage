@@ -11,8 +11,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/nao1215/dyer/internal/feature"
-	"github.com/nao1215/dyer/internal/profile"
+	"github.com/nao1215/omokage/internal/feature"
+	"github.com/nao1215/omokage/internal/profile"
 )
 
 const schema = `

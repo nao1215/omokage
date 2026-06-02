@@ -13,7 +13,7 @@ func TestRunNoArgsShowsHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
 	}
-	if !strings.Contains(stdout, "dyer analyzes writing style") {
+	if !strings.Contains(stdout, "omokage analyzes writing style") {
 		t.Fatalf("expected root help, got %q", stdout)
 	}
 }
@@ -27,7 +27,7 @@ func TestRunHelpAndVersion(t *testing.T) {
 		}
 	}
 	for _, arg := range []string{"version", "-v", "--version"} {
-		if code, stdout, _ := runApp(t, t.TempDir(), arg); code != 0 || !strings.Contains(stdout, "dyer") {
+		if code, stdout, _ := runApp(t, t.TempDir(), arg); code != 0 || !strings.Contains(stdout, "omokage") {
 			t.Fatalf("version via %q failed: code=%d stdout=%q", arg, code, stdout)
 		}
 	}

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nao1215/dyer/internal/config"
-	"github.com/nao1215/dyer/internal/feature"
+	"github.com/nao1215/omokage/internal/config"
+	"github.com/nao1215/omokage/internal/feature"
 )
 
 func TestCompare(t *testing.T) {

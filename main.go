@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/nao1215/dyer/cmd"
+	"github.com/nao1215/omokage/cmd"
 )
 
 func main() {

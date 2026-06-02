@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nao1215/dyer/internal/feature"
-	"github.com/nao1215/dyer/internal/profile"
+	"github.com/nao1215/omokage/internal/feature"
+	"github.com/nao1215/omokage/internal/profile"
 )
 
 func TestSaveLoadProfile(t *testing.T) {

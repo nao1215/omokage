@@ -8,7 +8,7 @@ import (
 func TestSaveLoadRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "dyer.toml")
+	path := filepath.Join(t.TempDir(), "omokage.toml")
 	expected := Default("writing-lab")
 	expected.Features.KatakanaRatio = false
 	expected.Features.LexicalFrequency = false

@@ -8,12 +8,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nao1215/dyer/internal/config"
+	"github.com/nao1215/omokage/internal/config"
 )
 
-const ConfigFileName = "dyer.toml"
+const ConfigFileName = "omokage.toml"
 
-var ErrProjectNotFound = errors.New("dyer project not found")
+var ErrProjectNotFound = errors.New("omokage project not found")
 
 func Init(root string, name string) (config.Config, error) {
 	configPath := filepath.Join(root, ConfigFileName)

@@ -80,7 +80,7 @@ func Load(path string) (Config, error) {
 }
 
 func Parse(data []byte) (Config, error) {
-	cfg := Default("dyer-project")
+	cfg := Default("omokage-project")
 	section := ""
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	for scanner.Scan() {
