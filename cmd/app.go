@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -14,6 +15,39 @@ import (
 	"github.com/nao1215/omokage/internal/project"
 	"github.com/nao1215/omokage/internal/storage"
 )
+
+// Output formats for `check`. text is the default human-readable report; json
+// is the machine-readable explanation for an LLM revise-and-recheck loop.
+const (
+	formatText = "text"
+	formatJSON = "json"
+)
+
+// devVersion is the sentinel reported for an untagged local build.
+const devVersion = "dev"
+
+// Version is the release version. goreleaser overrides it at build time via
+// ldflags (-X github.com/nao1215/omokage/cmd.Version=...). When it is left at
+// the default, resolveVersion falls back to the module version embedded by the
+// Go toolchain, so `go install ...@v1.2.3` (or @latest) still reports the tag.
+var Version = devVersion
+
+// resolveVersion returns the version to print. A goreleaser build sets Version
+// via ldflags and wins outright. Otherwise the binary was built with `go install`
+// or `go build`, so the module version recorded in the build info is used: that
+// is the git tag for `go install path@tag`/@latest, or "(devel)" for an untagged
+// local build, which we report as devVersion.
+func resolveVersion() string {
+	if Version != devVersion {
+		return Version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return devVersion
+}
 
 type App struct {
 	stdout  io.Writer
@@ -50,7 +84,7 @@ func (a *App) Run(args []string) int {
 	case "list":
 		return a.runList(args[1:])
 	case "version", "-v", "--version":
-		writeLine(a.stdout, "omokage dev")
+		writef(a.stdout, "omokage %s\n", resolveVersion())
 		return 0
 	default:
 		writef(a.stderr, "unknown command: %s\n\n", args[0])
@@ -65,7 +99,7 @@ func (a *App) runInit(args []string) int {
 	flagSet.Usage = func() {
 		writef(a.stderr, "Create an omokage project in the current directory (omokage.toml, profiles/, cache/).\n")
 		writef(a.stderr, "Usage: omokage init [--name NAME]\n")
-		flagSet.PrintDefaults()
+		printFlagDefaults(a.stderr, flagSet)
 	}
 	if err := flagSet.Parse(args); err != nil {
 		return 1
@@ -94,7 +128,7 @@ func (a *App) runTrain(args []string) int {
 	flagSet.Usage = func() {
 		writef(a.stderr, "Learn an author's style from every .md and .txt file in DIRECTORY.\n")
 		writef(a.stderr, "Usage: omokage train --author AUTHOR DIRECTORY\n")
-		flagSet.PrintDefaults()
+		printFlagDefaults(a.stderr, flagSet)
 	}
 	if err := flagSet.Parse(args); err != nil {
 		return 1
@@ -165,15 +199,22 @@ func (a *App) runTrain(args []string) int {
 func (a *App) runCheck(args []string) int {
 	flagSet := newFlagSet("check", a.stderr)
 	author := flagSet.String("author", "", "author profile name")
+	explain := flagSet.Bool("explain", false, "print a prioritized, numeric drift report instead of the top-3 summary")
+	format := flagSet.String("format", formatText, "output format: text or json (json implies --explain)")
 	flagSet.Usage = func() {
 		writef(a.stderr, "Score how closely FILE matches AUTHOR's trained style, from 0 to 100.\n")
-		writef(a.stderr, "Usage: omokage check --author AUTHOR FILE\n")
-		flagSet.PrintDefaults()
+		writef(a.stderr, "Usage: omokage check --author AUTHOR [--explain] [--format text|json] FILE\n")
+		printFlagDefaults(a.stderr, flagSet)
 	}
 	if err := flagSet.Parse(args); err != nil {
 		return 1
 	}
 	if strings.TrimSpace(*author) == "" || flagSet.NArg() != 1 {
+		flagSet.Usage()
+		return 1
+	}
+	if *format != formatText && *format != formatJSON {
+		writef(a.stderr, "unknown --format %q: want text or json\n", *format)
 		flagSet.Usage()
 		return 1
 	}
@@ -202,17 +243,43 @@ func (a *App) runCheck(args []string) int {
 		return 1
 	}
 
-	targetMetrics, err := feature.ExtractFile(targetPath)
+	// The plain path extracts whole-document metrics only. The explain/json path
+	// additionally splits the document into paragraphs so it can localize drift;
+	// that extra work runs only when the detailed output was requested.
+	detailed := *explain || *format == formatJSON
+	if !detailed {
+		targetMetrics, err := feature.ExtractFile(targetPath)
+		if err != nil {
+			writeLine(a.stderr, err)
+			return 1
+		}
+		renderComparison(a.stdout, renderOptions{
+			author:     record.Author,
+			comparison: profile.Score(record.Distribution, targetMetrics, cfg.Features),
+		})
+		// A one-line pointer so the detailed report is discoverable from the binary
+		// alone — a person or an LLM running plain `check` learns the next step
+		// without reading the README. It is omitted in the detailed modes, which
+		// already are the detailed report (and must stay clean for JSON parsing).
+		writeLine(a.stdout)
+		writeLine(a.stdout, "Tip: add --explain (or --format json) for per-feature drift, fix priority, and the paragraphs that drifted most.")
+		return 0
+	}
+
+	targetMetrics, segments, err := feature.ExtractFileWithSegments(targetPath)
 	if err != nil {
 		writeLine(a.stderr, err)
 		return 1
 	}
-
-	comparison := profile.Score(record.Distribution, targetMetrics, cfg.Features)
-	renderComparison(a.stdout, renderOptions{
-		author:     record.Author,
-		comparison: comparison,
-	})
+	explanation := profile.Explain(record.Distribution, targetMetrics, segments, cfg.Features)
+	if *format == formatJSON {
+		if err := renderExplanationJSON(a.stdout, record.Author, explanation); err != nil {
+			writeLine(a.stderr, err)
+			return 1
+		}
+		return 0
+	}
+	renderExplanationText(a.stdout, record.Author, explanation)
 	return 0
 }
 
@@ -331,6 +398,29 @@ func newFlagSet(name string, output io.Writer) *flag.FlagSet {
 	flagSet := flag.NewFlagSet(name, flag.ContinueOnError)
 	flagSet.SetOutput(output)
 	return flagSet
+}
+
+// printFlagDefaults lists a command's flags using the double-dash spelling shown
+// in each Usage line. Go's flag package accepts both -flag and --flag but prints
+// the single-dash form, which reads as inconsistent next to the "--author" usage
+// strings; this keeps the help uniform.
+func printFlagDefaults(w io.Writer, flagSet *flag.FlagSet) {
+	flagSet.VisitAll(func(f *flag.Flag) {
+		typeName, usage := flag.UnquoteUsage(f)
+		if typeName != "" {
+			writef(w, "  --%s %s\n", f.Name, typeName)
+		} else {
+			writef(w, "  --%s\n", f.Name)
+		}
+		writef(w, "        %s", usage)
+		// Mirror flag.PrintDefaults: show a default only when it is meaningful
+		// (a non-empty, non-false value), so boolean and empty-string flags stay
+		// uncluttered.
+		if f.DefValue != "" && f.DefValue != "false" {
+			writef(w, " (default %q)", f.DefValue)
+		}
+		writeLine(w)
+	})
 }
 
 func resolvePath(baseDir, target string) (string, error) {

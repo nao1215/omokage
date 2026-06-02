@@ -90,6 +90,53 @@ func ExtractFile(path string) (Metrics, error) {
 	return ExtractText(string(data)), nil
 }
 
+// Segment is one localizable unit of a document — a paragraph — paired with the
+// features extracted from it. It lets the explain path point at the specific
+// paragraph that drifts most, rather than only reporting whole-document drift.
+type Segment struct {
+	Index   int
+	Kind    string
+	Text    string
+	Metrics Metrics
+}
+
+// ExtractFileWithSegments reads a file once and returns both its whole-document
+// metrics and its per-paragraph segments. It backs `check --explain`/`--format
+// json`; the plain `check` path stays on ExtractFile so it does the lighter
+// whole-document work only.
+func ExtractFileWithSegments(path string) (Metrics, []Segment, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return Metrics{}, nil, err
+	}
+	text := string(data)
+	return ExtractText(text), ExtractSegments(text), nil
+}
+
+// ExtractSegments splits a document into paragraphs and extracts the features of
+// each, dropping whitespace-only paragraphs. The 1-based Index matches the
+// paragraph's position among the non-empty paragraphs so a report can name it.
+func ExtractSegments(text string) []Segment {
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	paragraphs := splitParagraphs(normalized)
+	segments := make([]Segment, 0, len(paragraphs))
+	index := 0
+	for _, paragraph := range paragraphs {
+		metrics := ExtractText(paragraph)
+		if metrics.CharacterCount == 0 {
+			continue
+		}
+		index++
+		segments = append(segments, Segment{
+			Index:   index,
+			Kind:    "paragraph",
+			Text:    paragraph,
+			Metrics: metrics,
+		})
+	}
+	return segments
+}
+
 // ExtractCorpus extracts features from each file independently and aggregates
 // them into a Distribution describing the mean and standard deviation of every
 // feature across the corpus.

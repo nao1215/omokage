@@ -134,6 +134,45 @@ func TestExtractCorpusMissingFile(t *testing.T) {
 	}
 }
 
+func TestExtractSegments(t *testing.T) {
+	t.Parallel()
+
+	text := "最初の段落です。短い文を書きます。\n\n   \n\n二つ目の段落です。もう少し続きます。"
+	segments := ExtractSegments(text)
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 non-empty segments, got %d", len(segments))
+	}
+	if segments[0].Index != 1 || segments[1].Index != 2 {
+		t.Fatalf("expected 1-based dense indexes, got %d and %d", segments[0].Index, segments[1].Index)
+	}
+	for _, segment := range segments {
+		if segment.Kind != "paragraph" {
+			t.Fatalf("unexpected segment kind: %q", segment.Kind)
+		}
+		if segment.Metrics.CharacterCount == 0 {
+			t.Fatalf("segment %d should carry metrics", segment.Index)
+		}
+	}
+}
+
+func TestExtractFileWithSegments(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "doc.md")
+	mustWrite(t, path, "段落一。これは本文です。\n\n段落二。これも本文です。")
+
+	metrics, segments, err := ExtractFileWithSegments(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.CharacterCount == 0 {
+		t.Fatal("expected whole-document metrics")
+	}
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(segments))
+	}
+}
+
 func mustWrite(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

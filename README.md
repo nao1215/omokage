@@ -92,6 +92,23 @@ Differences:
 
 Similarity runs from 0 to 100 and shows how close the text sits to the learned style. Differences lists the features that moved the most, such as the sentence-ending register (敬体 / 常体), the balance of kanji and kana, function-word and character n-gram usage, sentence length, and layout. omokage compares style rather than topic, so writing about something new in your usual voice still scores high.
 
+For final tuning, add `--explain` to lead with the high-level, editable features (register, script balance, shape), each with the draft's value, your trained mean ± spread, a z-score, and a fix priority, plus the paragraphs that drift most. `--format json` prints the same data for an LLM to read between rewrites. Both are opt-in, so plain `check` stays fast.
+
+```shell
+$ omokage check --author me --explain examples/draft-lost-voice.md
+Author: me
+Similarity: 0%
+
+High-level style differences (fix these first):
+  1. polite sentence-ending ratio is lower than reference [register]
+       target 0.000  reference 1.000 ± 0.000  (50.0σ)
+  2. kanji ratio is higher than reference [script]
+       target 0.489  reference 0.213 ± 0.025  (10.9σ)
+
+Paragraphs that drift most:
+  #4 (11.0σ; polite sentence-ending ratio lower): 特別な行為は一切実施していない。しかしながら…
+```
+
 ## How it scores
 
 When you train an author, omokage reads every file, measures a set of stylistic features for each document, and stores their mean and spread in a SQLite database under `profiles/` (one database per author). The text itself is not kept, only the numbers.

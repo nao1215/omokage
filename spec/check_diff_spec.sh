@@ -53,6 +53,59 @@ Describe 'omokage check, diff, and list'
     End
   End
 
+  Describe 'check --explain'
+    It 'keeps the default output free of the detailed report'
+      When run omokage check --author ja_me ja/lost.md
+      The status should be success
+      The output should include 'Differences:'
+      The output should not include 'High-level style'
+    End
+
+    It 'points at the detailed report so it is discoverable from the binary alone'
+      When run omokage check --author ja_me ja/lost.md
+      The status should be success
+      The output should include '--explain'
+      The output should include '--format json'
+    End
+
+    It 'omits the tip in the detailed report itself'
+      When run omokage check --author ja_me --explain ja/lost.md
+      The status should be success
+      The output should not include 'Tip: add --explain'
+    End
+
+    It 'leads with the editable high-level register drift'
+      When run omokage check --author ja_me --explain ja/lost.md
+      The status should be success
+      The output should include 'High-level style differences'
+      The output should include 'polite sentence-ending ratio is lower than reference'
+    End
+
+    It 'localizes drift to a paragraph'
+      When run omokage check --author ja_me --explain ja/lost.md
+      The status should be success
+      The output should include 'Paragraphs that drift most:'
+    End
+  End
+
+  Describe 'check --format json'
+    It 'emits a machine-readable report with reference statistics'
+      When run omokage check --author ja_me --format json ja/lost.md
+      The status should be success
+      The output should include '"author": "ja_me"'
+      The output should include '"similarity":'
+      The output should include '"high_level_drift"'
+      The output should include '"reference_mean"'
+      The output should include '"priority": 1'
+    End
+
+    It 'rejects an unknown format'
+      When run omokage check --author ja_me --format yaml ja/lost.md
+      The status should be failure
+      The stderr should include 'unknown --format'
+    End
+  End
+
   Describe 'check errors'
     It 'fails on an untrained author'
       When run omokage check --author ghost ja/keep.md

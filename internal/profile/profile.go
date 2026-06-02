@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nao1215/omokage/internal/config"
@@ -39,30 +40,123 @@ const driftThreshold = 1.0
 // features, so the diff command weighs lexical drift alongside structure.
 const lexicalDistanceScale = 8.0
 
+// Feature categories group the stylistic features by what kind of signal they
+// carry and, crucially, by how editable they are. The high-level categories
+// (register, structure, script) map to concrete things a person or an LLM can
+// change in a draft; the low-level categories (function word, character n-gram)
+// are diffuse fingerprints that cannot be edited directly and so are reported as
+// supporting detail. levelOf encodes that split.
+const (
+	categoryRegister     = "register"
+	categoryStructure    = "structure"
+	categoryScript       = "script"
+	categoryFunctionWord = "function-word"
+	categoryCharNgram    = "char-ngram"
+)
+
+const (
+	levelHigh = "high"
+	levelLow  = "low"
+)
+
+func levelOf(category string) string {
+	switch category {
+	case categoryFunctionWord, categoryCharNgram:
+		return levelLow
+	default:
+		return levelHigh
+	}
+}
+
 // featureSpec ties a stylistic feature to its config flag and accessor so that
 // scoring, drift reporting, and direct comparison share a single definition.
 type featureSpec struct {
-	label   string
-	enabled func(config.Features) bool
-	value   func(feature.Metrics) float64
-	isRatio bool
+	label    string
+	category string
+	enabled  func(config.Features) bool
+	value    func(feature.Metrics) float64
+	isRatio  bool
 }
 
 var featureSpecs = []featureSpec{
-	{"average sentence length", func(f config.Features) bool { return f.SentenceLength }, func(m feature.Metrics) float64 { return m.AverageSentenceLength }, false},
-	{"sentence length variance", func(f config.Features) bool { return f.SentenceLengthVariance }, func(m feature.Metrics) float64 { return m.SentenceLengthVariance }, false},
-	{"punctuation frequency", func(f config.Features) bool { return f.PunctuationFrequency }, func(m feature.Metrics) float64 { return m.PunctuationFrequency }, true},
-	{"newline frequency", func(f config.Features) bool { return f.NewlineFrequency }, func(m feature.Metrics) float64 { return m.NewlineFrequency }, true},
-	{"bullet-list frequency", func(f config.Features) bool { return f.BulletRatio }, func(m feature.Metrics) float64 { return m.BulletRatio }, true},
-	{"conjunction frequency", func(f config.Features) bool { return f.ConjunctionFrequency }, func(m feature.Metrics) float64 { return m.ConjunctionFrequency }, true},
-	{"kanji ratio", func(f config.Features) bool { return f.KanjiRatio }, func(m feature.Metrics) float64 { return m.KanjiRatio }, true},
-	{"hiragana ratio", func(f config.Features) bool { return f.HiraganaRatio }, func(m feature.Metrics) float64 { return m.HiraganaRatio }, true},
-	{"katakana ratio", func(f config.Features) bool { return f.KatakanaRatio }, func(m feature.Metrics) float64 { return m.KatakanaRatio }, true},
-	{"paragraph length variance", func(f config.Features) bool { return f.ParagraphLengthVariance }, func(m feature.Metrics) float64 { return m.ParagraphLengthVariance }, false},
-	{"markdown structure frequency", func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true},
-	{"polite sentence-ending ratio", func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true},
-	{"plain sentence-ending ratio", func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true},
+	{"average sentence length", categoryStructure, func(f config.Features) bool { return f.SentenceLength }, func(m feature.Metrics) float64 { return m.AverageSentenceLength }, false},
+	{"sentence length variance", categoryStructure, func(f config.Features) bool { return f.SentenceLengthVariance }, func(m feature.Metrics) float64 { return m.SentenceLengthVariance }, false},
+	{"punctuation frequency", categoryStructure, func(f config.Features) bool { return f.PunctuationFrequency }, func(m feature.Metrics) float64 { return m.PunctuationFrequency }, true},
+	{"newline frequency", categoryStructure, func(f config.Features) bool { return f.NewlineFrequency }, func(m feature.Metrics) float64 { return m.NewlineFrequency }, true},
+	{"bullet-list frequency", categoryStructure, func(f config.Features) bool { return f.BulletRatio }, func(m feature.Metrics) float64 { return m.BulletRatio }, true},
+	{"conjunction frequency", categoryStructure, func(f config.Features) bool { return f.ConjunctionFrequency }, func(m feature.Metrics) float64 { return m.ConjunctionFrequency }, true},
+	{"kanji ratio", categoryScript, func(f config.Features) bool { return f.KanjiRatio }, func(m feature.Metrics) float64 { return m.KanjiRatio }, true},
+	{"hiragana ratio", categoryScript, func(f config.Features) bool { return f.HiraganaRatio }, func(m feature.Metrics) float64 { return m.HiraganaRatio }, true},
+	{"katakana ratio", categoryScript, func(f config.Features) bool { return f.KatakanaRatio }, func(m feature.Metrics) float64 { return m.KatakanaRatio }, true},
+	{"paragraph length variance", categoryStructure, func(f config.Features) bool { return f.ParagraphLengthVariance }, func(m feature.Metrics) float64 { return m.ParagraphLengthVariance }, false},
+	{"markdown structure frequency", categoryStructure, func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true},
+	{"polite sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true},
+	{"plain sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true},
 }
+
+// FeatureDrift is the full, per-feature comparison that backs the explain output.
+// Unlike the plain "X is higher than reference" string, it carries the numbers an
+// editor needs: the target's value, the author's mean and spread, the z-score
+// (how far out of the author's range it sits), and where it falls in the fix
+// priority. Category/Level let a consumer separate the high-level, editable
+// features from the low-level fingerprint.
+type FeatureDrift struct {
+	Feature   string
+	Category  string
+	Level     string
+	Target    float64
+	Mean      float64
+	StdDev    float64
+	Z         float64
+	Direction string
+	Priority  int
+	// Actionable marks whether the drift exceeds driftThreshold (~1σ) — i.e. it is
+	// far enough out of the author's range to be worth correcting, not noise.
+	Actionable bool
+}
+
+// SegmentDrift localizes drift to a single paragraph so a report can say which
+// part of the document strays most, not just that the document as a whole does.
+// Only the high-level (editable) features are used to score a segment: function
+// words and n-grams are too sparse in a short paragraph to localize reliably, and
+// they are not what a person edits paragraph by paragraph anyway.
+type SegmentDrift struct {
+	Index       int
+	Kind        string
+	Excerpt     string
+	Z           float64
+	TopFeature  string
+	TopCategory string
+	TopZ        float64
+	Direction   string
+}
+
+// Explanation is the rich, opt-in result behind `check --explain`/`--format
+// json`. Similarity is identical to Score's; Drifts adds the per-feature numbers
+// (high-level first, then the capped low-level fingerprint) and Segments points
+// at the paragraphs that drift most.
+type Explanation struct {
+	Similarity int
+	Drifts     []FeatureDrift
+	Segments   []SegmentDrift
+}
+
+// lowLevelExplainLimit caps how many low-level fingerprint drifts the explanation
+// reports. The full set runs to hundreds of n-grams; surfacing the top few keeps
+// the report readable while still flagging the strongest fingerprint movement.
+const lowLevelExplainLimit = 10
+
+// segmentExplainLimit caps how many drifting paragraphs the explanation reports,
+// keeping attention on the few worst offenders.
+const segmentExplainLimit = 5
+
+// minSegmentContentRunes is the minimum non-space character count for a paragraph
+// to be localized. A heading or a one-line paragraph has no sentence ending, so
+// its register and script ratios collapse to noise (a huge spurious z against an
+// author who normally ends sentences politely); document-level features already
+// capture whether such short lines are in character. Skipping them keeps the
+// localization pointed at real prose.
+const minSegmentContentRunes = 30
 
 // Score measures how closely a target document matches a learned author
 // distribution. Each feature is standardized against the author's own
@@ -70,17 +164,42 @@ var featureSpecs = []featureSpec{
 // by how far it strays from the author's natural variation rather than from a
 // single averaged value.
 func Score(reference feature.Distribution, target feature.Metrics, flags config.Features) Comparison {
-	type scored struct {
-		label     string
-		z         float64
-		direction string
+	drifts := featureDrifts(reference, target, flags)
+	if len(drifts) == 0 {
+		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
 	}
+	return Comparison{
+		Similarity:  similarityFromDrifts(drifts),
+		Differences: topDifferences(drifts),
+	}
+}
 
-	results := make([]scored, 0, len(featureSpecs))
-	registerZ := 0.0
-	registerCount := 0
-	otherZ := 0.0
-	otherCount := 0
+// Explain produces the rich, editor-facing view of the same comparison Score
+// makes. It reuses the identical per-feature z-scores (so the headline similarity
+// matches Score exactly), then prioritizes them for editing and, when segments
+// are supplied, localizes the drift to the worst paragraphs.
+func Explain(reference feature.Distribution, target feature.Metrics, segments []feature.Segment, flags config.Features) Explanation {
+	drifts := featureDrifts(reference, target, flags)
+	similarity := 100
+	if len(drifts) > 0 {
+		similarity = similarityFromDrifts(drifts)
+	}
+	return Explanation{
+		Similarity: similarity,
+		Drifts:     prioritize(drifts),
+		Segments:   locateSegmentDrift(reference, segments, flags),
+	}
+}
+
+// featureDrifts computes the standardized drift of every active feature: the
+// scalar style features, then the function-word fingerprint, then the character
+// n-gram fingerprint. It is the shared core of Score and Explain — Score reduces
+// it to a similarity and a top-3 list, Explain keeps the full detail. Features
+// neither the author nor the target exhibits are dropped, exactly as before, so
+// dead features (e.g. Japanese script in an English corpus) do not distort the
+// result.
+func featureDrifts(reference feature.Distribution, target feature.Metrics, flags config.Features) []FeatureDrift {
+	drifts := make([]FeatureDrift, 0, len(featureSpecs))
 	for _, spec := range featureSpecs {
 		if !spec.enabled(flags) {
 			continue
@@ -88,60 +207,42 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 		mean := spec.value(reference.Mean)
 		std := spec.value(reference.StdDev)
 		observed := spec.value(target)
-		// A feature the author never exhibits (mean and spread both zero) carries
-		// no stylistic signal when the target also lacks it — e.g. the Japanese
-		// script and sentence-ending features are identically zero for an English
-		// corpus. Counting them as a perfect match would inflate every score, so
-		// they are dropped. A target that *does* exhibit the feature still counts
-		// as drift via the floor below.
 		if mean == 0 && std == 0 && observed == 0 {
 			continue
 		}
-		z := math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio)
-		// The register markers (polite/plain endings) are kept in their own group:
-		// a register shift is a decisive impostor signal (an LLM imitation), but
-		// averaged in with the other structural features it gets diluted, and those
-		// features add noise to same-author comparisons. See combineDrift.
-		if registerLabels[spec.label] {
-			registerZ += z
-			registerCount++
-		} else {
-			otherZ += z
-			otherCount++
-		}
-		results = append(results, scored{
-			label:     spec.label,
-			z:         z,
-			direction: direction(mean, observed),
+		drifts = append(drifts, FeatureDrift{
+			Feature:   spec.label,
+			Category:  spec.category,
+			Level:     levelOf(spec.category),
+			Target:    observed,
+			Mean:      mean,
+			StdDev:    std,
+			Z:         math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio),
+			Direction: direction(mean, observed),
 		})
 	}
 
-	functionWordZ := 0.0
-	functionWordCount := 0
 	if flags.LexicalFrequency {
 		for _, word := range feature.LexicalVocabulary() {
 			mean := reference.Mean.LexicalFrequencies[word]
 			std := reference.StdDev.LexicalFrequencies[word]
 			observed := target.LexicalFrequencies[word]
-			// A function word neither the author nor the target ever uses (e.g.
-			// English words in a Japanese-only corpus) carries no signal, so it is
-			// dropped exactly like the degenerate scalar features above.
 			if mean == 0 && std == 0 && observed == 0 {
 				continue
 			}
-			z := math.Abs(observed-mean) / lexicalStdFloor(std, mean)
-			functionWordZ += z
-			functionWordCount++
-			results = append(results, scored{
-				label:     fmt.Sprintf("function word %q", word),
-				z:         z,
-				direction: direction(mean, observed),
+			drifts = append(drifts, FeatureDrift{
+				Feature:   fmt.Sprintf("function word %q", word),
+				Category:  categoryFunctionWord,
+				Level:     levelLow,
+				Target:    observed,
+				Mean:      mean,
+				StdDev:    std,
+				Z:         math.Abs(observed-mean) / lexicalStdFloor(std, mean),
+				Direction: direction(mean, observed),
 			})
 		}
 	}
 
-	ngramZ := 0.0
-	ngramCount := 0
 	if flags.CharNgramFrequency {
 		for ngram, mean := range reference.Mean.CharNgrams {
 			std := reference.StdDev.CharNgrams[ngram]
@@ -149,39 +250,70 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 			if mean == 0 && std == 0 && observed == 0 {
 				continue
 			}
-			z := math.Abs(observed-mean) / lexicalStdFloor(std, mean)
-			ngramZ += z
-			ngramCount++
-			results = append(results, scored{
-				label:     fmt.Sprintf("character n-gram %q", ngram),
-				z:         z,
-				direction: direction(mean, observed),
+			drifts = append(drifts, FeatureDrift{
+				Feature:   fmt.Sprintf("character n-gram %q", ngram),
+				Category:  categoryCharNgram,
+				Level:     levelLow,
+				Target:    observed,
+				Mean:      mean,
+				StdDev:    std,
+				Z:         math.Abs(observed-mean) / lexicalStdFloor(std, mean),
+				Direction: direction(mean, observed),
 			})
 		}
 	}
 
-	if registerCount+otherCount+functionWordCount+ngramCount == 0 {
-		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
-	}
+	return drifts
+}
 
+// similarityFromDrifts reduces per-feature drifts to the same similarity Score
+// has always produced: each group's mean z is fed to combineDrift, which keeps
+// the lexical fingerprint leading, charges register only for its excess, and lets
+// the structural remainder nudge. Reconstructing the group means from the drift
+// list keeps a single source of truth instead of duplicating the accumulation.
+func similarityFromDrifts(drifts []FeatureDrift) int {
+	var registerZ, otherZ, functionWordZ, ngramZ float64
+	var registerCount, otherCount, functionWordCount, ngramCount int
+	for _, drift := range drifts {
+		switch drift.Category {
+		case categoryRegister:
+			registerZ += drift.Z
+			registerCount++
+		case categoryFunctionWord:
+			functionWordZ += drift.Z
+			functionWordCount++
+		case categoryCharNgram:
+			ngramZ += drift.Z
+			ngramCount++
+		default:
+			otherZ += drift.Z
+			otherCount++
+		}
+	}
 	meanZ := combineDrift(groupDrift{
 		register:     meanOf(registerZ, registerCount),
 		other:        meanOf(otherZ, otherCount),
 		functionWord: meanOf(functionWordZ, functionWordCount),
 		ngram:        meanOf(ngramZ, ngramCount),
 	})
-	similarity := clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
+	return clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
+}
 
-	sort.SliceStable(results, func(i int, j int) bool {
-		return results[i].z > results[j].z
+// topDifferences renders the default `check` output: the three highest-z drifts
+// above the threshold, phrased as before. Sorting a copy leaves the caller's
+// slice order untouched.
+func topDifferences(drifts []FeatureDrift) []string {
+	sorted := append([]FeatureDrift(nil), drifts...)
+	sort.SliceStable(sorted, func(i int, j int) bool {
+		return sorted[i].Z > sorted[j].Z
 	})
 
 	differences := make([]string, 0, 3)
-	for _, result := range results {
-		if result.z < driftThreshold {
+	for _, drift := range sorted {
+		if drift.Z < driftThreshold {
 			continue
 		}
-		differences = append(differences, fmt.Sprintf("%s is %s than reference", result.label, result.direction))
+		differences = append(differences, fmt.Sprintf("%s is %s than reference", drift.Feature, drift.Direction))
 		if len(differences) == 3 {
 			break
 		}
@@ -189,8 +321,102 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 	if len(differences) == 0 {
 		differences = append(differences, "no significant stylistic drift detected")
 	}
+	return differences
+}
 
-	return Comparison{Similarity: similarity, Differences: differences}
+// prioritize orders the drifts for an editor: the high-level, editable features
+// first (sorted by how far out of range they sit), then the low-level fingerprint
+// capped to the strongest few. Every drift gets a 1-based Priority and an
+// Actionable flag, so a consumer can fix the highest-priority high-level item
+// first and treat the fingerprint as supporting detail.
+func prioritize(drifts []FeatureDrift) []FeatureDrift {
+	high := make([]FeatureDrift, 0, len(drifts))
+	low := make([]FeatureDrift, 0, len(drifts))
+	for _, drift := range drifts {
+		if drift.Level == levelHigh {
+			high = append(high, drift)
+		} else {
+			low = append(low, drift)
+		}
+	}
+	byZ := func(s []FeatureDrift) func(i, j int) bool {
+		return func(i, j int) bool { return s[i].Z > s[j].Z }
+	}
+	sort.SliceStable(high, byZ(high))
+	sort.SliceStable(low, byZ(low))
+	if len(low) > lowLevelExplainLimit {
+		low = low[:lowLevelExplainLimit]
+	}
+
+	ordered := make([]FeatureDrift, 0, len(high)+len(low))
+	ordered = append(ordered, high...)
+	ordered = append(ordered, low...)
+	for i := range ordered {
+		ordered[i].Priority = i + 1
+		ordered[i].Actionable = ordered[i].Z >= driftThreshold
+	}
+	return ordered
+}
+
+// locateSegmentDrift scores each paragraph against the author distribution using
+// only the high-level features, and returns the worst few. It is the one
+// genuinely extra computation in the explain path (a feature extraction per
+// paragraph), which is why callers only pass segments in explain mode.
+func locateSegmentDrift(reference feature.Distribution, segments []feature.Segment, flags config.Features) []SegmentDrift {
+	if len(segments) == 0 {
+		return nil
+	}
+	out := make([]SegmentDrift, 0, len(segments))
+	for _, segment := range segments {
+		if segment.Metrics.CharacterCount < minSegmentContentRunes {
+			continue
+		}
+		var sum float64
+		var count int
+		var top FeatureDrift
+		for _, drift := range featureDrifts(reference, segment.Metrics, flags) {
+			if drift.Level != levelHigh {
+				continue
+			}
+			sum += drift.Z
+			count++
+			if count == 1 || drift.Z > top.Z {
+				top = drift
+			}
+		}
+		if count == 0 {
+			continue
+		}
+		out = append(out, SegmentDrift{
+			Index:       segment.Index,
+			Kind:        segment.Kind,
+			Excerpt:     excerpt(segment.Text),
+			Z:           sum / float64(count),
+			TopFeature:  top.Feature,
+			TopCategory: top.Category,
+			TopZ:        top.Z,
+			Direction:   top.Direction,
+		})
+	}
+	sort.SliceStable(out, func(i int, j int) bool {
+		return out[i].Z > out[j].Z
+	})
+	if len(out) > segmentExplainLimit {
+		out = out[:segmentExplainLimit]
+	}
+	return out
+}
+
+// excerpt returns a short, single-line preview of a paragraph for a report,
+// collapsing internal whitespace and truncating with an ellipsis.
+func excerpt(text string) string {
+	const maxRunes = 50
+	collapsed := strings.Join(strings.Fields(text), " ")
+	runes := []rune(collapsed)
+	if len(runes) <= maxRunes {
+		return collapsed
+	}
+	return string(runes[:maxRunes]) + "…"
 }
 
 // Compare measures the stylistic closeness of two individual documents. Unlike

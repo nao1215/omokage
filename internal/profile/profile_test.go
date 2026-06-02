@@ -108,6 +108,133 @@ func TestScoreSeparatesLexicalFingerprint(t *testing.T) {
 	}
 }
 
+func TestExplainMatchesScoreSimilarity(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	dist := sampleDistribution()
+	target := dist.Mean
+	target.KanjiRatio = dist.Mean.KanjiRatio + 3*dist.StdDev.KanjiRatio
+
+	score := Score(dist, target, flags)
+	explanation := Explain(dist, target, nil, flags)
+	if explanation.Similarity != score.Similarity {
+		t.Fatalf("Explain similarity %d should match Score similarity %d",
+			explanation.Similarity, score.Similarity)
+	}
+}
+
+func TestExplainSurfacesHighLevelDriftFirst(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+		"先週は仕事が忙しかったです。それでも毎日きちんと休めました。",
+	}
+	dist := distributionFromTexts(polite)
+
+	plainText := "今日は良い天気である。散歩に出かける。とても気持ちが良いのだった。"
+	target := feature.ExtractText(plainText)
+	explanation := Explain(dist, target, feature.ExtractSegments(plainText), flags)
+
+	if len(explanation.Drifts) == 0 {
+		t.Fatal("expected drifts for a register-shifted target")
+	}
+
+	// The first actionable drift must be a high-level, editable feature, not a
+	// function word or character n-gram.
+	var firstActionable *FeatureDrift
+	for i := range explanation.Drifts {
+		if explanation.Drifts[i].Actionable {
+			firstActionable = &explanation.Drifts[i]
+			break
+		}
+	}
+	if firstActionable == nil {
+		t.Fatal("expected at least one actionable drift")
+	}
+	if firstActionable.Level != levelHigh {
+		t.Fatalf("expected the first actionable drift to be high-level, got %q (%s)",
+			firstActionable.Feature, firstActionable.Level)
+	}
+
+	// Priority must be a dense 1..N ranking with high-level features before
+	// low-level ones.
+	lastHighIndex := -1
+	firstLowIndex := -1
+	for i, drift := range explanation.Drifts {
+		if drift.Priority != i+1 {
+			t.Fatalf("priority should be 1-based dense order, got %d at index %d", drift.Priority, i)
+		}
+		if drift.Level == levelHigh {
+			lastHighIndex = i
+		} else if firstLowIndex == -1 {
+			firstLowIndex = i
+		}
+	}
+	if firstLowIndex != -1 && lastHighIndex > firstLowIndex {
+		t.Fatalf("high-level drift at index %d should precede low-level at %d", lastHighIndex, firstLowIndex)
+	}
+
+	// The numeric detail an editor needs must be populated.
+	if firstActionable.Mean == 0 && firstActionable.StdDev == 0 {
+		t.Fatalf("expected reference statistics on drift %q", firstActionable.Feature)
+	}
+}
+
+func TestExplainLocalizesDriftToParagraph(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+	}
+	dist := distributionFromTexts(polite)
+
+	// A faithful first paragraph followed by a register-flipped second one. The
+	// drifting paragraph must be the one localized.
+	keep := "今日は朝から良い天気です。少し散歩に出かけました。空気が澄んでいてとても気持ちが良かったです。"
+	drift := "結論を以下に記述する。本件は重要である。対応を実施するものとする。詳細は別途共有することとする。"
+	doc := keep + "\n\n" + drift
+
+	explanation := Explain(dist, feature.ExtractText(doc), feature.ExtractSegments(doc), flags)
+	if len(explanation.Segments) == 0 {
+		t.Fatal("expected segment localization")
+	}
+	if explanation.Segments[0].Index != 2 {
+		t.Fatalf("expected the second paragraph to drift most, got paragraph %d", explanation.Segments[0].Index)
+	}
+	if explanation.Segments[0].TopFeature == "" {
+		t.Fatal("expected a top drifting feature for the worst paragraph")
+	}
+}
+
+func TestExplainSkipsShortSegments(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	dist := distributionFromTexts([]string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+	})
+
+	// A bare heading is too short to localize and must not appear as drift.
+	doc := "# 見出し\n\n" + "今日はとても良い天気です。散歩に出かけました。気持ちが良かったです。"
+	explanation := Explain(dist, feature.ExtractText(doc), feature.ExtractSegments(doc), flags)
+	for _, segment := range explanation.Segments {
+		if strings.Contains(segment.Excerpt, "見出し") {
+			t.Fatalf("a short heading should be skipped, got %q", segment.Excerpt)
+		}
+	}
+}
+
 func distributionFromTexts(texts []string) feature.Distribution {
 	perDoc := make([]feature.Metrics, 0, len(texts))
 	for _, text := range texts {

@@ -6,6 +6,30 @@ import (
 	"testing"
 )
 
+func TestResolveVersionPrefersLdflags(t *testing.T) { //nolint:paralleltest // mutates package-level Version
+	// Not parallel: it mutates the package-level Version that ldflags sets.
+	original := Version
+	t.Cleanup(func() { Version = original })
+
+	Version = "v1.2.3"
+	if got := resolveVersion(); got != "v1.2.3" {
+		t.Fatalf("expected the ldflags version to win, got %q", got)
+	}
+}
+
+func TestResolveVersionFallsBackWhenUnset(t *testing.T) { //nolint:paralleltest // mutates package-level Version
+	// Not parallel: it mutates the package-level Version that ldflags sets.
+	original := Version
+	t.Cleanup(func() { Version = original })
+
+	// With the default sentinel and no module version recorded in the test
+	// binary's build info, resolveVersion must still return a non-empty label.
+	Version = "dev"
+	if got := resolveVersion(); got == "" {
+		t.Fatal("expected a non-empty version label")
+	}
+}
+
 func TestRunNoArgsShowsHelp(t *testing.T) {
 	t.Parallel()
 

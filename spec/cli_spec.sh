@@ -42,17 +42,41 @@ Describe 'omokage CLI surface'
   End
 
   Describe 'subcommand help describes the command'
-    It 'describes check'
+    It 'describes check and lists its flags with double dashes'
       When run "$OMOKAGE_BIN" check --help
       The status should be failure
       The stderr should include 'Score how closely'
       The stderr should include 'Usage: omokage check'
+      The stderr should include '--author'
+      The stderr should include '--explain'
+      The stderr should include '--format'
+    End
+
+    It 'surfaces the explain and json options in check help'
+      When run "$OMOKAGE_BIN" check --help
+      The status should be failure
+      The stderr should include 'prioritized'
+      The stderr should include 'text or json'
+    End
+
+    It 'does not show single-dash flag spellings in check help'
+      When run "$OMOKAGE_BIN" check --help
+      The status should be failure
+      The stderr should not include '  -author'
+    End
+
+    It 'describes init with a double-dash flag'
+      When run "$OMOKAGE_BIN" init --help
+      The status should be failure
+      The stderr should include 'Usage: omokage init'
+      The stderr should include '--name'
     End
 
     It 'describes train'
       When run "$OMOKAGE_BIN" train --help
       The status should be failure
       The stderr should include 'Learn an author'
+      The stderr should include '--author'
     End
   End
 End

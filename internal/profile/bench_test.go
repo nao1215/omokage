@@ -45,3 +45,15 @@ func BenchmarkCompare(b *testing.B) {
 		_ = Compare(target, other, flags)
 	}
 }
+
+// BenchmarkExplain measures the opt-in detailed path, including per-paragraph
+// localization, against BenchmarkScore to bound how much --explain/--format json
+// adds over the plain check.
+func BenchmarkExplain(b *testing.B) {
+	dist, target, _, flags := benchSetup()
+	segments := feature.ExtractSegments(benchDoc(8, 999))
+	b.ReportAllocs()
+	for b.Loop() {
+		_ = Explain(dist, target, segments, flags)
+	}
+}
