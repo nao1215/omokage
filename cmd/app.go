@@ -135,7 +135,7 @@ type scopeFlags struct {
 
 func registerScopeFlags(flagSet *flag.FlagSet) scopeFlags {
 	return scopeFlags{
-		global:     flagSet.Bool("global", false, "use the global profile store (OMOKAGE_HOME) instead of searching for a local project"),
+		global:     flagSet.Bool("global", false, "use the global profile store ($OMOKAGE_HOME, else your user config dir like ~/.config/omokage) instead of searching for a local project"),
 		configPath: flagSet.String("config", "", "path to an omokage.toml to use, overriding project discovery"),
 		profileDir: flagSet.String("profile-dir", "", "directory of author profiles to use, overriding the config"),
 	}
@@ -200,7 +200,7 @@ func (a *App) resolveAuthor(scope project.Scope, explicit string) (string, error
 
 func (a *App) runInit(args []string) int {
 	flagSet := newFlagSet("init", a.stderr)
-	global := flagSet.Bool("global", false, "create the per-user store under OMOKAGE_HOME instead of the current directory")
+	global := flagSet.Bool("global", false, "create the per-user store ($OMOKAGE_HOME, else your user config dir like ~/.config/omokage) instead of the current directory")
 	name := flagSet.String("name", "", "project name (defaults to the directory name)")
 	flagSet.Usage = func() {
 		writef(a.stderr, "Create an omokage store (omokage.toml, profiles/, cache/).\n")
@@ -457,8 +457,11 @@ func (a *App) runDiff(args []string) int {
 	flagSet := newFlagSet("diff", a.stderr)
 	scopeF := registerScopeFlags(flagSet)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Compare two files directly and report their stylistic similarity, no profile needed.\n")
+		writef(a.stderr, "Compare two files directly and report their stylistic similarity.\n")
+		writef(a.stderr, "No init, training, or profile is needed: diff reads the two files and compares them.\n")
 		writef(a.stderr, "Usage: omokage diff FILE_A FILE_B\n")
+		writef(a.stderr, "\nThe flags below are optional and only select which feature weights to use:\n")
+		writef(a.stderr, "diff uses the active store's config when one is found, and the built-in defaults otherwise.\n")
 		printFlagDefaults(a.stderr, flagSet)
 	}
 	if code, ok := parseArgs(flagSet, args); !ok {

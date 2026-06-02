@@ -41,6 +41,9 @@ Create a project in the current directory. This writes `omokage.toml`, `profiles
 ```shell
 $ omokage init
 Initialized omokage project.
+Config: /home/me/blog/omokage.toml
+Profiles: /home/me/blog/profiles
+Cache: /home/me/blog/cache
 ```
 
 Learn a style from past writing.
@@ -48,6 +51,7 @@ Learn a style from past writing.
 ```shell
 $ omokage train --author me examples/posts
 Trained author "me" from 8 files.
+Profile: /home/me/blog/profiles/me.db
 ```
 
 Check whether a draft still reads like that author. With a single trained
