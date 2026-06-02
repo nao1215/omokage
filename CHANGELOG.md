@@ -7,6 +7,35 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-02
+
+### Added
+
+- Term preferences: `train` now learns, per profile, which surface form you use
+  for a recurring term (`DB` vs `データベース`, `HTTP` vs `http`) and stores it in
+  the same per-author database — no LLM, no network, no dictionary, and the
+  training text itself is never stored. `normalized_key` (case, full-width ASCII,
+  and edge punctuation folded) and `group_key` are kept separate, so a
+  normalization merge is distinguishable from a corpus-declared alias bridge such
+  as `データベース（DB）`; bridges are conservative (a Japanese phrase paired with an
+  uppercase acronym), so unrelated terms are never fused.
+- `show --format json` adds a `term_preferences` array (group, preferred surface,
+  counts, and variants). `check --format json` adds a `term_warnings` array for
+  any draft surface that differs from its group's preferred form. Term warnings
+  are a separate layer and never change the similarity score; both appear only in
+  the JSON output, so plain `check` is unchanged.
+
+### Fixed
+
+- Feature extraction now measures natural-language prose only. YAML front matter,
+  Markdown images and link URLs (visible text kept), raw URLs, HTML tags, and HTML
+  entities are stripped alongside code, and per-paragraph extraction strips on the
+  whole document before splitting, so a fenced block (a mermaid diagram or shell
+  session) containing a blank line no longer leaks into the report. `check
+  --explain`/`--format json` no longer points at diagrams, HTML, or front matter
+  as the paragraphs that drift most, and inline markup no longer skews the script
+  ratios.
+
 ## [0.1.0] - 2026-06-02
 
 ### Added
