@@ -39,7 +39,7 @@ func ExtractDocuments(docs []string) Profile {
 	var links []aliasLink
 
 	for docIndex, doc := range docs {
-		prose := stripNoise(feature.StripCode(doc))
+		prose := feature.StripNonProse(doc)
 		for surface, n := range surfaceCounts(prose) {
 			totalCount[surface] += n
 			if docsBySurface[surface] == nil {

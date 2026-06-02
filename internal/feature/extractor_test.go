@@ -275,3 +275,97 @@ func mustWrite(t *testing.T, path string, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestExtractTextStripsHTMLTags checks that raw HTML embedded in Markdown does
+// not change the measured prose: wrapping prose in HTML tags yields the same
+// metrics as the bare prose (the tags and attribute text are not counted).
+func TestExtractTextStripsHTMLTags(t *testing.T) {
+	t.Parallel()
+
+	bare := ExtractText("これは本文です。とても静かな夜でした。")
+	withHTML := ExtractText(`<p align="center"><img src="x.png" alt="DB"></p>これは本文です。<br>とても静かな夜でした。`)
+
+	if withHTML.CharacterCount != bare.CharacterCount {
+		t.Fatalf("HTML changed character count: %d vs %d", withHTML.CharacterCount, bare.CharacterCount)
+	}
+	if math.Abs(withHTML.HiraganaRatio-bare.HiraganaRatio) > 1e-9 ||
+		math.Abs(withHTML.KanjiRatio-bare.KanjiRatio) > 1e-9 {
+		t.Fatalf("HTML skewed script ratios: %+v vs %+v", withHTML, bare)
+	}
+}
+
+// TestExtractSegmentsIgnoresFencedBlockWithBlankLine pins the segment fix: a
+// fenced block that contains a blank line (mermaid, shell sessions) must not leak
+// into per-paragraph segments. Before the fix, splitting before stripping code
+// exposed the block's interior as a prose paragraph.
+func TestExtractSegmentsIgnoresFencedBlockWithBlankLine(t *testing.T) {
+	t.Parallel()
+
+	doc := "最初の段落です。これは本文。\n\n" +
+		"```mermaid\nflowchart TD\n    subgraph Linter[\"omokage\"]\n\n    A --> B\n    end\n```\n\n" +
+		"最後の段落です。これも本文。"
+
+	segments := ExtractSegments(doc)
+	for _, s := range segments {
+		if contains(s.Text, "subgraph") || contains(s.Text, "flowchart") || contains(s.Text, "-->") {
+			t.Fatalf("fenced diagram content leaked into a segment: %q", s.Text)
+		}
+	}
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 prose segments, got %d: %+v", len(segments), segments)
+	}
+}
+
+// TestExtractSegmentsIgnoresHTMLOnlyParagraph checks that a paragraph made only
+// of HTML produces no segment (it has no prose to localize).
+func TestExtractSegmentsIgnoresHTMLOnlyParagraph(t *testing.T) {
+	t.Parallel()
+
+	doc := "本文の段落です。静かでした。\n\n" +
+		"<p align=\"center\">\n  <img src=\"images/x.jpg\" alt=\"omokage\" width=\"280\">\n</p>\n\n" +
+		"次の本文です。穏やかでした。"
+
+	segments := ExtractSegments(doc)
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 prose segments (HTML-only paragraph dropped), got %d: %+v", len(segments), segments)
+	}
+	for _, s := range segments {
+		if contains(s.Text, "<img") || contains(s.Text, "align") {
+			t.Fatalf("HTML leaked into a segment: %q", s.Text)
+		}
+	}
+}
+
+func contains(haystack, needle string) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		if haystack[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
+
+// TestStripNonProse pins the unified prose cleaner: front matter, code, Markdown
+// images, link URLs (visible text kept), raw URLs, HTML, and entities are removed.
+func TestStripNonProse(t *testing.T) {
+	t.Parallel()
+
+	in := "---\ntitle: foo\nimage: images/cover.jpg\n---\n\n" +
+		"詳しくは [データベース入門](https://example.com/db.html) を参照。\n" +
+		"![demo](images/demo.gif)\n" +
+		"直接 https://example.org/x も貼る。\n" +
+		"<p align=\"center\">中央</p>&nbsp;末尾。\n" +
+		"```go\ncode := DB()\n```\n"
+	got := StripNonProse(in)
+
+	for _, bad := range []string{"title:", "images/cover.jpg", "https://", "example.com", "db.html", "demo", "images/demo.gif", "align", "<p", "&nbsp;", "code :="} {
+		if contains(got, bad) {
+			t.Errorf("StripNonProse left non-prose %q in: %q", bad, got)
+		}
+	}
+	for _, want := range []string{"データベース入門", "中央", "末尾", "参照"} {
+		if !contains(got, want) {
+			t.Errorf("StripNonProse dropped prose %q from: %q", want, got)
+		}
+	}
+}
