@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="doc/img/omokage-icon.jpg" alt="omokage" width="320">
-</p>
-
 [![Build](https://github.com/nao1215/omokage/actions/workflows/build.yml/badge.svg)](https://github.com/nao1215/omokage/actions/workflows/build.yml)
 [![MultiPlatformUnitTest](https://github.com/nao1215/omokage/actions/workflows/unit_test.yml/badge.svg)](https://github.com/nao1215/omokage/actions/workflows/unit_test.yml)
 [![reviewdog](https://github.com/nao1215/omokage/actions/workflows/reviewdog.yml/badge.svg)](https://github.com/nao1215/omokage/actions/workflows/reviewdog.yml)
@@ -10,7 +6,9 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/nao1215/omokage)](https://goreportcard.com/report/github.com/nao1215/omokage)
 ![GitHub](https://img.shields.io/github/license/nao1215/omokage)
 
-# omokage
+<p align="center">
+  <img src="doc/img/omokage-icon.jpg" alt="omokage" width="320">
+</p>
 
 omokage learns how you write from your past writing, then tells you how close a new draft is to that style. It runs locally and works on Japanese and English text.
 
