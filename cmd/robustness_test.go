@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -107,6 +108,14 @@ func TestRemoveLeavesStoreIntactOnConfigFailure(t *testing.T) {
 
 func TestRemoveRollsBackDefaultOnDeleteFailure(t *testing.T) {
 	t.Parallel()
+
+	// This test induces an os.Remove failure by making the profiles directory
+	// non-writable. On Windows the read-only attribute on a directory does not
+	// prevent deleting files inside it, so the failure cannot be induced this way.
+	// The rollback logic itself is platform-agnostic and is exercised on Unix.
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not block file deletion on Windows")
+	}
 
 	workDir := trainedProject(t)
 	if code, _, stderr := runApp(t, workDir, "train", "--author", "me", "--default", "posts"); code != 0 {
