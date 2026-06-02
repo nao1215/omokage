@@ -193,6 +193,14 @@ func marshalLexical(vector map[string]float64) string {
 
 func LoadProfile(path string) (profile.Record, error) {
 	ctx := context.Background()
+	// Opening the database would create an empty file for an untrained author,
+	// which then shows up in `list`. Reject a missing profile up front instead.
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return profile.Record{}, fmt.Errorf("profile not found: %s", path)
+		}
+		return profile.Record{}, err
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return profile.Record{}, err

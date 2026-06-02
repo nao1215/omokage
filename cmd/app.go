@@ -131,6 +131,13 @@ func (a *App) runTrain(args []string) int {
 		writeLine(a.stderr, err)
 		return 1
 	}
+	// CollectFiles found supported files, but ExtractCorpus drops empty or
+	// whitespace-only documents. If nothing usable is left, a saved profile would
+	// be all zeros and every later check would score against noise, so refuse.
+	if distribution.DocumentCount == 0 {
+		writef(a.stderr, "no usable text found in %s (all files were empty)\n", sourceDir)
+		return 1
+	}
 
 	profilePath, err := project.ProfilePath(root, cfg, *author)
 	if err != nil {

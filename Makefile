@@ -1,4 +1,4 @@
-.PHONY: build test lint clean tools help
+.PHONY: build test test-e2e lint clean tools help
 
 APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
@@ -20,6 +20,9 @@ clean: ## Clean project
 test: ## Run tests with coverage output
 	env GOOS=$(GOOS) $(GO_TEST) -cover -covermode=atomic -coverpkg=$(GO_PKGROOT) -coverprofile=coverage.out $(GO_PKGROOT)
 	$(GO_TOOL) cover -html=coverage.out -o coverage.html
+
+test-e2e: build ## Run shellspec end-to-end tests against the built binary
+	shellspec --shell sh
 
 lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml
