@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-02
+
 ### Added
 
 - Author resolution for `check` (and `show`): with a single trained profile
