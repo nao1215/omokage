@@ -721,12 +721,14 @@ func (a *App) runShow(args []string) int {
 
 	if *format == formatJSON {
 		// Term preferences are reported only in the JSON form (the text form stays a
-		// short provenance summary, not a term dump). A load failure here should not
-		// hide the rest of the profile, so it degrades to an empty list.
+		// short provenance summary, not a term dump). They are auxiliary to the
+		// profile summary, so a load failure is reported on stderr but does not fail
+		// the command or corrupt the JSON on stdout: the summary is still emitted with
+		// an empty term list.
 		terms, err := storage.LoadTerms(profilePath)
 		if err != nil {
-			writeLine(a.stderr, err)
-			return 1
+			writef(a.stderr, "warning: could not load term preferences: %v\n", err)
+			terms = term.Profile{}
 		}
 		payload := profileSummaryJSON{
 			Author:          record.Author,

@@ -149,66 +149,25 @@ Paragraphs that drift most:
 
 ## Term preferences
 
-Alongside the style distribution, `train` learns which surface form you actually
-use for a recurring term — `DB` or `データベース`, `HTTP` or `http` — and stores
-it in the same per-author database. Like everything else in omokage this runs
-fully locally: no LLM, no network, no external dictionary, and the original
-training text is never stored — only surfaces and their counts. The extraction is
-deterministic, so the same corpus always yields the same result.
+`train` also learns which surface form you use for a recurring term (`DB` vs
+`データベース`, `HTTP` vs `http`) and stores it in the same per-author database.
+This runs locally like the rest of omokage: no LLM, no network, no dictionary,
+and only surfaces and counts are stored, never the training text.
 
-Two separate ideas keep the merging conservative:
+A `normalized_key` folds case, full-width/half-width ASCII, and edge punctuation,
+so `DB`, `db`, and `ＤＢ` share one key. A `group_key` merges different normalized
+keys into one concept only when the corpus declares the bridge itself, such as
+`データベース（DB）` or `データベース。以下、DB`; one side must be a Japanese phrase
+and the other a short uppercase acronym. A bare `A（B）` is not enough, so `優先度`
+and `プライオリティ` stay separate unless bridged. The preferred surface of a group
+is the one with the highest `doc_count`, then `count`, then the smallest surface.
 
-- **`normalized_key`** folds away differences that never change meaning — letter
-  case, full-width/half-width ASCII, and surrounding punctuation — so `DB`, `db`,
-  and `ＤＢ` share one normalized key.
-- **`group_key`** identifies a same-concept group. Two *different* normalized keys
-  are merged into one group **only when the corpus itself spells out the bridge**,
-  e.g. `データベース（DB）`, `DB（データベース）`, `データベース（以下 DB）`, or
-  `データベース。以下、DB`. A bare `A（B）` is never enough: one side must be a
-  Japanese phrase and the other a short uppercase acronym. So `優先度` and
-  `プライオリティ` stay separate unless the text bridges them. Because the two keys
-  are stored separately you can always tell a normalization merge (one
-  `normalized_key`) from an alias-bridge merge (several `normalized_key`s under one
-  `group_key`).
-
-Within a group the **preferred surface** is chosen in a fixed, stable order:
-highest `doc_count` first, then highest `count`, then the lexicographically
-smallest surface as a deterministic tie-break.
-
-`show --format json` adds a `term_preferences` array (the text output stays a
-short provenance summary):
-
-```jsonc
-"term_preferences": [
-  {
-    "group_key": "term:db",
-    "preferred_surface": "DB",
-    "doc_count": 2,
-    "total_count": 7,
-    "variants": [
-      { "surface": "DB", "normalized_key": "db", "count": 5, "doc_count": 2 },
-      { "surface": "データベース", "normalized_key": "データベース", "count": 2, "doc_count": 1 }
-    ]
-  }
-]
-```
-
-`check --format json` adds a `term_warnings` array for any surface in the draft
-that differs from the group's preferred one. It is a **separate layer from the
-similarity score and never changes it**:
-
-```jsonc
-"term_warnings": [
-  { "group_key": "term:db", "preferred_surface": "DB", "used_surface": "ＤＢ", "count": 1 }
-]
-```
-
-(`occurrences` with line/column information is a reserved, optional field for a
-future version; only counts are reported today.) Term preferences appear only in
-the JSON output, so plain `check` stays fast and unchanged. Candidate extraction
-is intentionally lightweight — Japanese kanji/katakana runs and ASCII words and
-acronyms; half-width katakana and semantic synonyms without a corpus-declared
-bridge are out of scope for now.
+`show --format json` adds `term_preferences` (group, preferred surface, counts,
+and variants). `check --format json` adds `term_warnings` for any draft surface
+that differs from its group's preferred form; this is a separate layer that never
+changes the similarity score. Both appear only in JSON, so plain `check` is
+unchanged. Extraction is intentionally lightweight; half-width katakana and
+synonyms without a corpus-declared bridge are out of scope.
 
 ## Choosing the author
 
