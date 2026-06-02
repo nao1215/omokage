@@ -46,9 +46,9 @@ Profiles: /home/me/blog/profiles
 Cache: /home/me/blog/cache
 ```
 
-Learn a style from past writing. Pass one or more inputs after the flags: a
-directory (scanned for `.md` and `.txt`), an individual `.md`/`.txt` file, or any
-mix of them. You no longer have to gather everything into one folder first.
+Learn a style from past writing. `train` takes one or more inputs: directories
+(scanned recursively for `.md` and `.txt`) and individual `.md`/`.txt` files, in
+any mix, so you need not gather everything into one folder first.
 
 ```shell
 $ omokage train --author me examples/posts
@@ -56,9 +56,9 @@ Trained author "me" from 8 files.
 Profile: /home/me/blog/profiles/me.db
 ```
 
-Mix a directory with individual files — `examples/posts` holds 8 files, so adding
-one more makes 9. The same file reached through more than one input (for example a
-directory and a file inside it) is learned only once.
+Paths may be relative or absolute. `examples/posts` holds 8 files, so adding one
+more makes 9; a file reached twice — through a containing directory or a symlink —
+is learned once, matched by its real path.
 
 ```shell
 $ omokage train --author me examples/posts examples/draft-keeps-voice.md
@@ -66,29 +66,9 @@ Trained author "me" from 9 files.
 Profile: /home/me/blog/profiles/me.db
 ```
 
-**What `INPUT...` accepts.** `train` takes one or more inputs, each of which is one
-of:
-
-- a **directory** — recursively scanned, collecting every `.md` and `.txt` file
-  inside it (other extensions are ignored);
-- an **`.md` or `.txt` file** — taken as given.
-
-The rules:
-
-- **Local paths only.** Relative and absolute paths both work; they resolve from
-  the current directory. omokage never touches the network.
-- **`.md` / `.txt` only.** A file passed directly with any other extension is an
-  error. Inside a directory, unsupported files are simply skipped.
-- **De-duplicated by real path.** Passing the same file twice — directly, via a
-  directory that contains it, or through a symlink (`alias.md` -> `a.md`) — learns
-  it once. De-duplication follows symlinks and resolves the real path, so an alias
-  and its target never count as two and the learned style is not skewed.
-- **All-or-nothing.** If any single input is invalid, `train` reports that exact
-  input by name and trains nothing, so you can drop the offending argument and
-  re-run. Nothing is saved on a partial failure.
-- **URLs are rejected.** omokage does not fetch URLs (including authenticated
-  ones); passing `http://…`, `https://…`, or any other `scheme://…` is a clear
-  error. Save the page as a local `.md`/`.txt` file and pass that path instead.
+omokage reads local files only and never touches the network. An unsupported
+extension, a missing path, or a URL stops the run by name and trains nothing, so
+you can drop the bad argument and retry.
 
 ```shell
 $ omokage train --author me https://example.com/post
@@ -195,8 +175,8 @@ $ omokage rename --author me --to watashi
 $ omokage remove --author watashi
 ```
 
-When a profile was trained from more than one input, `list --long` shows the
-first source with a `(+N more)` hint, and `show` lists every input in full:
+Trained from several inputs, `list --long` shows the first source with a
+`(+N more)` hint and `show` lists them all:
 
 ```shell
 $ omokage show --author me
@@ -211,11 +191,9 @@ Sentences: 142
 Characters: 5210
 ```
 
-`show --format json` carries the same provenance in two fields. `sources` is the
-full list of inputs and is what you should read. `source_dir` is kept only for
-backward compatibility with older profiles and tools: it holds the training
-directory when an author was trained from a single directory, and is empty
-otherwise (a single file, or several inputs) — it never contains a file path.
+`show --format json` exposes the same provenance: read the `sources` array for
+the full list. `source_dir` is kept for backward compatibility — it holds the
+training directory only when a single directory was used, and is empty otherwise.
 
 `rename` keeps the trained data and refuses to overwrite an existing author;
 `remove` clears `default_author` if it pointed at the removed profile.
