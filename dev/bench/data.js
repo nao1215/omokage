@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780385348542,
+  "lastUpdate": 1780385630724,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -1560,6 +1560,150 @@ window.BENCHMARK_DATA = {
             "value": 921,
             "unit": "allocs/op",
             "extra": "3529 times\n2 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "Naohiro CHIKAMATSU",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "n.chika156@gmail.com",
+            "name": "Naohiro CHIKAMATSU",
+            "username": "nao1215"
+          },
+          "distinct": true,
+          "id": "8d000ed6c84c6c79eba6d5807bb7b606db30a387",
+          "message": "docs: refresh stale check --explain output in README\n\nVerified the README examples against the current binary and example corpus.\nThe --explain block was out of date: it showed the drifting paragraph at 11.0σ\n(now 50.0σ) and omitted the \"Low-level fingerprint drift\" section the tool now\nprints. Update the example and prose to match, and add the timezone that\nlist --long actually emits in the TRAINED column.",
+          "timestamp": "2026-06-02T16:32:49+09:00",
+          "tree_id": "5ce80a8c59f399f2ecf74b3d1e6ae5148e7dea9b",
+          "url": "https://github.com/nao1215/omokage/commit/8d000ed6c84c6c79eba6d5807bb7b606db30a387"
+        },
+        "date": 1780385629722,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 1257653,
+            "unit": "ns/op\t  326544 B/op\t    2820 allocs/op",
+            "extra": "1267 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 1257653,
+            "unit": "ns/op",
+            "extra": "1267 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 326544,
+            "unit": "B/op",
+            "extra": "1267 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 2820,
+            "unit": "allocs/op",
+            "extra": "1267 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 5284041,
+            "unit": "ns/op\t  102944 B/op\t      34 allocs/op",
+            "extra": "207 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 5284041,
+            "unit": "ns/op",
+            "extra": "207 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 102944,
+            "unit": "B/op",
+            "extra": "207 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "207 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 258288,
+            "unit": "ns/op\t   86032 B/op\t     864 allocs/op",
+            "extra": "4561 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 258288,
+            "unit": "ns/op",
+            "extra": "4561 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 86032,
+            "unit": "B/op",
+            "extra": "4561 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 864,
+            "unit": "allocs/op",
+            "extra": "4561 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 235238,
+            "unit": "ns/op\t   83017 B/op\t     762 allocs/op",
+            "extra": "4929 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 235238,
+            "unit": "ns/op",
+            "extra": "4929 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 83017,
+            "unit": "B/op",
+            "extra": "4929 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 762,
+            "unit": "allocs/op",
+            "extra": "4929 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 321860,
+            "unit": "ns/op\t  213205 B/op\t     921 allocs/op",
+            "extra": "3536 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 321860,
+            "unit": "ns/op",
+            "extra": "3536 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 213205,
+            "unit": "B/op",
+            "extra": "3536 times\n2 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 921,
+            "unit": "allocs/op",
+            "extra": "3536 times\n2 procs"
           }
         ]
       }
