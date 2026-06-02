@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -257,12 +258,14 @@ func (a *App) runCheck(args []string) int {
 			author:     record.Author,
 			comparison: profile.Score(record.Distribution, targetMetrics, cfg.Features),
 		})
-		// A one-line pointer so the detailed report is discoverable from the binary
-		// alone — a person or an LLM running plain `check` learns the next step
-		// without reading the README. It is omitted in the detailed modes, which
-		// already are the detailed report (and must stay clean for JSON parsing).
-		writeLine(a.stdout)
-		writeLine(a.stdout, "Tip: add --explain (or --format json) for per-feature drift, fix priority, and the paragraphs that drifted most.")
+		// A one-line pointer to the detailed report, but only when a person is
+		// watching: it goes to stderr and only when stderr is a terminal. A pipe, a
+		// redirect, a `$(...)` capture, a script, or an LLM harness gets clean output
+		// on both streams; an interactive user gets the hint. The flags stay
+		// discoverable for everyone through `check --help` and the root help.
+		if isTerminal(a.stderr) {
+			writeLine(a.stderr, "Tip: add --explain (or --format json) for per-feature drift, fix priority, and the paragraphs that drifted most.")
+		}
 		return 0
 	}
 
@@ -386,7 +389,7 @@ func (a *App) printRootHelp() {
 	writeLine(a.stdout, "Commands:")
 	writeLine(a.stdout, "  init     Create an omokage project here (omokage.toml, profiles/, cache/).")
 	writeLine(a.stdout, "  train    Learn an author's style from a directory of .md and .txt files.")
-	writeLine(a.stdout, "  check    Score how closely a file matches a trained author, from 0 to 100.")
+	writeLine(a.stdout, "  check    Score how closely a file matches a trained author (--explain for details).")
 	writeLine(a.stdout, "  diff     Compare two files directly, without a trained profile.")
 	writeLine(a.stdout, "  list     List the author profiles trained in this project.")
 	writeLine(a.stdout, "  version  Print the omokage version.")
@@ -452,6 +455,22 @@ func renderComparison(w io.Writer, opt renderOptions) {
 	for _, difference := range opt.comparison.Differences {
 		writef(w, "- %s\n", difference)
 	}
+}
+
+// isTerminal reports whether the writer is an interactive terminal. It is used to
+// show the discoverability tip only to a human at a console, never into a pipe,
+// redirect, or capture. A non-*os.File writer (e.g. the bytes.Buffer the tests
+// inject) is never a terminal, so the tip stays out of programmatic output.
+func isTerminal(w io.Writer) bool {
+	file, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func writeLine(w io.Writer, args ...any) {

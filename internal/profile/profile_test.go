@@ -211,8 +211,71 @@ func TestExplainLocalizesDriftToParagraph(t *testing.T) {
 	if explanation.Segments[0].Index != 2 {
 		t.Fatalf("expected the second paragraph to drift most, got paragraph %d", explanation.Segments[0].Index)
 	}
-	if explanation.Segments[0].TopFeature == "" {
+	if explanation.Segments[0].Feature == "" {
 		t.Fatal("expected a top drifting feature for the worst paragraph")
+	}
+	// The headline z and the named feature must correspond, and the feature must
+	// clear the reporting bar.
+	if explanation.Segments[0].Z < 1.0 {
+		t.Fatalf("a reported paragraph must hold an actionable drift, got %.2fσ", explanation.Segments[0].Z)
+	}
+}
+
+func TestLocalizationExcludesDocumentGlobalFeatures(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	// A profile whose documents carry markdown structure and varied paragraph
+	// lengths, so the document-global features have a non-zero mean and spread.
+	dist := distributionFromTexts([]string{
+		"# 見出し\n\n今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。\n\n- 箇条書き\n- もう一つ",
+		"## 別の見出し\n\n昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。とても満足な一日でした。\n\n> 引用文",
+		"### 三つ目\n\n週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+	})
+
+	// A plain prose draft with no headings or bullets. Its per-paragraph markdown
+	// structure / bullet / newline / paragraph-length-variance all collapse to a
+	// constant, which used to dominate every paragraph as the "top" drift. None of
+	// those document-global features may now be named as a paragraph's drift.
+	doc := "今日は良い天気である。散歩に出かける。気持ちが良いのだった。\n\n" +
+		"午後も外を歩いた。風がとても心地よかった。空はどこまでも青かった。"
+	explanation := Explain(dist, feature.ExtractText(doc), feature.ExtractSegments(doc), flags)
+
+	documentGlobal := map[string]bool{
+		"markdown structure frequency": true,
+		"bullet-list frequency":        true,
+		"newline frequency":            true,
+		"paragraph length variance":    true,
+		"sentence length variance":     true,
+	}
+	for _, segment := range explanation.Segments {
+		if documentGlobal[segment.Feature] {
+			t.Fatalf("paragraph #%d localized to a document-global feature %q", segment.Index, segment.Feature)
+		}
+	}
+}
+
+func TestNearMatchProducesNoMisleadingSegments(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	corpus := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+	}
+	dist := distributionFromTexts(corpus)
+
+	// A draft built from the author's own sentences: a near-match. No paragraph
+	// holds a genuinely actionable local drift, so none must be reported rather
+	// than a list of paragraphs with negligible or document-global drift.
+	doc := corpus[0] + "\n\n" + corpus[1]
+	explanation := Explain(dist, feature.ExtractText(doc), feature.ExtractSegments(doc), flags)
+	for _, segment := range explanation.Segments {
+		if segment.Z < 1.0 {
+			t.Fatalf("near-match paragraph #%d reported with sub-threshold drift %.2fσ", segment.Index, segment.Z)
+		}
 	}
 }
 

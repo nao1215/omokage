@@ -53,25 +53,25 @@ Describe 'omokage check, diff, and list'
     End
   End
 
-  Describe 'check --explain'
-    It 'keeps the default output free of the detailed report'
+  Describe 'plain check output contract'
+    It 'keeps captured output clean on both streams'
+      # shellspec captures the streams (not a terminal), so the discoverability
+      # tip must be suppressed entirely — scripts and pipes see only the result.
       When run omokage check --author ja_me ja/lost.md
       The status should be success
       The output should include 'Differences:'
       The output should not include 'High-level style'
+      The output should not include 'Tip:'
+      The stderr should equal ''
     End
+  End
 
-    It 'points at the detailed report so it is discoverable from the binary alone'
-      When run omokage check --author ja_me ja/lost.md
-      The status should be success
-      The output should include '--explain'
-      The output should include '--format json'
-    End
-
+  Describe 'check --explain'
     It 'omits the tip in the detailed report itself'
       When run omokage check --author ja_me --explain ja/lost.md
       The status should be success
-      The output should not include 'Tip: add --explain'
+      The output should not include 'Tip:'
+      The stderr should not include 'Tip:'
     End
 
     It 'leads with the editable high-level register drift'
@@ -81,10 +81,18 @@ Describe 'omokage check, diff, and list'
       The output should include 'polite sentence-ending ratio is lower than reference'
     End
 
-    It 'localizes drift to a paragraph'
+    It 'localizes register drift to the flipped paragraphs'
       When run omokage check --author ja_me --explain ja/lost.md
       The status should be success
       The output should include 'Paragraphs that drift most:'
+      The output should include 'polite sentence-ending ratio lower'
+    End
+
+    It 'does not localize a near-match to a document-global feature'
+      When run omokage check --author ja_me --explain ja/keep.md
+      The status should be success
+      The output should not include 'markdown structure frequency lower'
+      The output should not include 'paragraph length variance lower'
     End
   End
 
@@ -97,6 +105,14 @@ Describe 'omokage check, diff, and list'
       The output should include '"high_level_drift"'
       The output should include '"reference_mean"'
       The output should include '"priority": 1'
+    End
+
+    It 'localizes segments with the corresponding feature in JSON'
+      When run omokage check --author ja_me --format json ja/lost.md
+      The status should be success
+      The output should include '"segments"'
+      The output should include '"feature": "polite sentence-ending ratio"'
+      The output should include '"category": "register"'
     End
 
     It 'rejects an unknown format'

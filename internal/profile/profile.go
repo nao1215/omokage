@@ -70,28 +70,44 @@ func levelOf(category string) string {
 
 // featureSpec ties a stylistic feature to its config flag and accessor so that
 // scoring, drift reporting, and direct comparison share a single definition.
+//
+// localizable marks the features that carry meaning at the granularity of a
+// single paragraph and that a writer can act on there: register, script balance,
+// average sentence length, and punctuation frequency. Each is normalized by a
+// denominator large enough to stay stable in one paragraph (script-character
+// count, sentence count, character count). The cleared features fall into two
+// groups. Document-global features — the variance features (which need many
+// sentences or paragraphs) and the layout features (newline, bullet, markdown
+// structure) — collapse to a constant per paragraph (a prose paragraph has no
+// headings, so its markdown structure frequency is always zero) and would
+// otherwise rank every paragraph the same way for the same spurious reason.
+// Conjunction frequency is cleared for a different reason: its denominator is the
+// paragraph's word-token count, so a single connective spikes it to a large,
+// misleading z in a short paragraph. Paragraph localization uses only the
+// localizable set; whole-document scoring uses every feature.
 type featureSpec struct {
-	label    string
-	category string
-	enabled  func(config.Features) bool
-	value    func(feature.Metrics) float64
-	isRatio  bool
+	label       string
+	category    string
+	enabled     func(config.Features) bool
+	value       func(feature.Metrics) float64
+	isRatio     bool
+	localizable bool
 }
 
 var featureSpecs = []featureSpec{
-	{"average sentence length", categoryStructure, func(f config.Features) bool { return f.SentenceLength }, func(m feature.Metrics) float64 { return m.AverageSentenceLength }, false},
-	{"sentence length variance", categoryStructure, func(f config.Features) bool { return f.SentenceLengthVariance }, func(m feature.Metrics) float64 { return m.SentenceLengthVariance }, false},
-	{"punctuation frequency", categoryStructure, func(f config.Features) bool { return f.PunctuationFrequency }, func(m feature.Metrics) float64 { return m.PunctuationFrequency }, true},
-	{"newline frequency", categoryStructure, func(f config.Features) bool { return f.NewlineFrequency }, func(m feature.Metrics) float64 { return m.NewlineFrequency }, true},
-	{"bullet-list frequency", categoryStructure, func(f config.Features) bool { return f.BulletRatio }, func(m feature.Metrics) float64 { return m.BulletRatio }, true},
-	{"conjunction frequency", categoryStructure, func(f config.Features) bool { return f.ConjunctionFrequency }, func(m feature.Metrics) float64 { return m.ConjunctionFrequency }, true},
-	{"kanji ratio", categoryScript, func(f config.Features) bool { return f.KanjiRatio }, func(m feature.Metrics) float64 { return m.KanjiRatio }, true},
-	{"hiragana ratio", categoryScript, func(f config.Features) bool { return f.HiraganaRatio }, func(m feature.Metrics) float64 { return m.HiraganaRatio }, true},
-	{"katakana ratio", categoryScript, func(f config.Features) bool { return f.KatakanaRatio }, func(m feature.Metrics) float64 { return m.KatakanaRatio }, true},
-	{"paragraph length variance", categoryStructure, func(f config.Features) bool { return f.ParagraphLengthVariance }, func(m feature.Metrics) float64 { return m.ParagraphLengthVariance }, false},
-	{"markdown structure frequency", categoryStructure, func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true},
-	{"polite sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true},
-	{"plain sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true},
+	{"average sentence length", categoryStructure, func(f config.Features) bool { return f.SentenceLength }, func(m feature.Metrics) float64 { return m.AverageSentenceLength }, false, true},
+	{"sentence length variance", categoryStructure, func(f config.Features) bool { return f.SentenceLengthVariance }, func(m feature.Metrics) float64 { return m.SentenceLengthVariance }, false, false},
+	{"punctuation frequency", categoryStructure, func(f config.Features) bool { return f.PunctuationFrequency }, func(m feature.Metrics) float64 { return m.PunctuationFrequency }, true, true},
+	{"newline frequency", categoryStructure, func(f config.Features) bool { return f.NewlineFrequency }, func(m feature.Metrics) float64 { return m.NewlineFrequency }, true, false},
+	{"bullet-list frequency", categoryStructure, func(f config.Features) bool { return f.BulletRatio }, func(m feature.Metrics) float64 { return m.BulletRatio }, true, false},
+	{"conjunction frequency", categoryStructure, func(f config.Features) bool { return f.ConjunctionFrequency }, func(m feature.Metrics) float64 { return m.ConjunctionFrequency }, true, false},
+	{"kanji ratio", categoryScript, func(f config.Features) bool { return f.KanjiRatio }, func(m feature.Metrics) float64 { return m.KanjiRatio }, true, true},
+	{"hiragana ratio", categoryScript, func(f config.Features) bool { return f.HiraganaRatio }, func(m feature.Metrics) float64 { return m.HiraganaRatio }, true, true},
+	{"katakana ratio", categoryScript, func(f config.Features) bool { return f.KatakanaRatio }, func(m feature.Metrics) float64 { return m.KatakanaRatio }, true, true},
+	{"paragraph length variance", categoryStructure, func(f config.Features) bool { return f.ParagraphLengthVariance }, func(m feature.Metrics) float64 { return m.ParagraphLengthVariance }, false, false},
+	{"markdown structure frequency", categoryStructure, func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true, false},
+	{"polite sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true, true},
+	{"plain sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true, true},
 }
 
 // FeatureDrift is the full, per-feature comparison that backs the explain output.
@@ -115,20 +131,21 @@ type FeatureDrift struct {
 	Actionable bool
 }
 
-// SegmentDrift localizes drift to a single paragraph so a report can say which
-// part of the document strays most, not just that the document as a whole does.
-// Only the high-level (editable) features are used to score a segment: function
-// words and n-grams are too sparse in a short paragraph to localize reliably, and
-// they are not what a person edits paragraph by paragraph anyway.
+// SegmentDrift localizes drift to a single paragraph and names the one editable,
+// paragraph-local feature that strays most there, so a report can say not just
+// where to look but what to change. Feature/Z correspond: Z is that feature's
+// z-score, so the headline number and the named feature always agree. A paragraph
+// is only reported when its strongest localizable drift is actually worth acting
+// on, which keeps near-match documents from listing paragraphs with negligible or
+// document-global drift.
 type SegmentDrift struct {
-	Index       int
-	Kind        string
-	Excerpt     string
-	Z           float64
-	TopFeature  string
-	TopCategory string
-	TopZ        float64
-	Direction   string
+	Index     int
+	Kind      string
+	Excerpt   string
+	Feature   string
+	Category  string
+	Z         float64
+	Direction string
 }
 
 // Explanation is the rich, opt-in result behind `check --explain`/`--format
@@ -149,6 +166,12 @@ const lowLevelExplainLimit = 10
 // segmentExplainLimit caps how many drifting paragraphs the explanation reports,
 // keeping attention on the few worst offenders.
 const segmentExplainLimit = 5
+
+// segmentDriftThreshold is the minimum z-score a paragraph's strongest
+// localizable feature must reach to be reported. It matches driftThreshold (~1σ),
+// the same bar the whole-document report uses to call a feature "actionable", so
+// a paragraph is only surfaced when it holds drift genuinely worth editing.
+const segmentDriftThreshold = driftThreshold
 
 // minSegmentContentRunes is the minimum non-space character count for a paragraph
 // to be localized. A heading or a one-line paragraph has no sentence ending, so
@@ -199,28 +222,7 @@ func Explain(reference feature.Distribution, target feature.Metrics, segments []
 // dead features (e.g. Japanese script in an English corpus) do not distort the
 // result.
 func featureDrifts(reference feature.Distribution, target feature.Metrics, flags config.Features) []FeatureDrift {
-	drifts := make([]FeatureDrift, 0, len(featureSpecs))
-	for _, spec := range featureSpecs {
-		if !spec.enabled(flags) {
-			continue
-		}
-		mean := spec.value(reference.Mean)
-		std := spec.value(reference.StdDev)
-		observed := spec.value(target)
-		if mean == 0 && std == 0 && observed == 0 {
-			continue
-		}
-		drifts = append(drifts, FeatureDrift{
-			Feature:   spec.label,
-			Category:  spec.category,
-			Level:     levelOf(spec.category),
-			Target:    observed,
-			Mean:      mean,
-			StdDev:    std,
-			Z:         math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio),
-			Direction: direction(mean, observed),
-		})
-	}
+	drifts := scalarDrifts(reference, target, flags, func(featureSpec) bool { return true })
 
 	if flags.LexicalFrequency {
 		for _, word := range feature.LexicalVocabulary() {
@@ -358,10 +360,48 @@ func prioritize(drifts []FeatureDrift) []FeatureDrift {
 	return ordered
 }
 
-// locateSegmentDrift scores each paragraph against the author distribution using
-// only the high-level features, and returns the worst few. It is the one
-// genuinely extra computation in the explain path (a feature extraction per
-// paragraph), which is why callers only pass segments in explain mode.
+// scalarDrifts computes the standardized drift of the scalar style features that
+// pass the include predicate. featureDrifts uses it for the full set (and then
+// appends the lexical and n-gram fingerprints); paragraph localization uses it
+// for the localizable subset only, which also avoids recomputing the hundreds of
+// fingerprint z-scores per paragraph. Features neither the author nor the target
+// exhibits are dropped so dead features do not distort the result.
+func scalarDrifts(reference feature.Distribution, target feature.Metrics, flags config.Features, include func(featureSpec) bool) []FeatureDrift {
+	drifts := make([]FeatureDrift, 0, len(featureSpecs))
+	for _, spec := range featureSpecs {
+		if !spec.enabled(flags) || !include(spec) {
+			continue
+		}
+		mean := spec.value(reference.Mean)
+		std := spec.value(reference.StdDev)
+		observed := spec.value(target)
+		if mean == 0 && std == 0 && observed == 0 {
+			continue
+		}
+		drifts = append(drifts, FeatureDrift{
+			Feature:   spec.label,
+			Category:  spec.category,
+			Level:     levelOf(spec.category),
+			Target:    observed,
+			Mean:      mean,
+			StdDev:    std,
+			Z:         math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio),
+			Direction: direction(mean, observed),
+		})
+	}
+	return drifts
+}
+
+// locateSegmentDrift names, for each paragraph, the single editable feature that
+// strays most there, and returns the worst few. It scores paragraphs on the
+// localizable feature subset only: document-global features (layout, variance)
+// are constant per paragraph and would otherwise rank every paragraph the same
+// way for the same spurious reason. A paragraph is reported only when its
+// strongest localizable drift clears segmentDriftThreshold, so a near-match
+// document — where nothing local stands out — yields an empty list rather than
+// misleading guidance. This is the one genuinely extra computation in the explain
+// path (a feature extraction per paragraph), so callers pass segments in explain
+// mode only.
 func locateSegmentDrift(reference feature.Distribution, segments []feature.Segment, flags config.Features) []SegmentDrift {
 	if len(segments) == 0 {
 		return nil
@@ -371,31 +411,25 @@ func locateSegmentDrift(reference feature.Distribution, segments []feature.Segme
 		if segment.Metrics.CharacterCount < minSegmentContentRunes {
 			continue
 		}
-		var sum float64
-		var count int
 		var top FeatureDrift
-		for _, drift := range featureDrifts(reference, segment.Metrics, flags) {
-			if drift.Level != levelHigh {
-				continue
-			}
-			sum += drift.Z
-			count++
-			if count == 1 || drift.Z > top.Z {
+		found := false
+		for _, drift := range scalarDrifts(reference, segment.Metrics, flags, localizableSpec) {
+			if !found || drift.Z > top.Z {
 				top = drift
+				found = true
 			}
 		}
-		if count == 0 {
+		if !found || top.Z < segmentDriftThreshold {
 			continue
 		}
 		out = append(out, SegmentDrift{
-			Index:       segment.Index,
-			Kind:        segment.Kind,
-			Excerpt:     excerpt(segment.Text),
-			Z:           sum / float64(count),
-			TopFeature:  top.Feature,
-			TopCategory: top.Category,
-			TopZ:        top.Z,
-			Direction:   top.Direction,
+			Index:     segment.Index,
+			Kind:      segment.Kind,
+			Excerpt:   excerpt(segment.Text),
+			Feature:   top.Feature,
+			Category:  top.Category,
+			Z:         top.Z,
+			Direction: top.Direction,
 		})
 	}
 	sort.SliceStable(out, func(i int, j int) bool {
@@ -405,6 +439,12 @@ func locateSegmentDrift(reference feature.Distribution, segments []feature.Segme
 		out = out[:segmentExplainLimit]
 	}
 	return out
+}
+
+// localizableSpec selects the features that are meaningful and editable at the
+// granularity of a single paragraph. See featureSpec.localizable.
+func localizableSpec(spec featureSpec) bool {
+	return spec.localizable
 }
 
 // excerpt returns a short, single-line preview of a paragraph for a report,

@@ -46,13 +46,19 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 		}
 	}
 
-	if len(explanation.Segments) > 0 {
-		writeLine(w)
-		writeLine(w, "Paragraphs that drift most:")
-		for _, segment := range explanation.Segments {
-			writef(w, "  #%d (%.1fσ; %s %s): %s\n",
-				segment.Index, segment.Z, segment.TopFeature, segment.Direction, segment.Excerpt)
-		}
+	writeLine(w)
+	if len(explanation.Segments) == 0 {
+		// Reported only in the detailed view, so silence here is informative, not a
+		// gap: no single paragraph holds an editable, paragraph-local drift worth
+		// acting on. Saying so keeps late-stage tuning from chasing a paragraph that
+		// is not actually the problem.
+		writeLine(w, "No single paragraph stands out; the remaining drift is spread across the document or in the low-level fingerprint.")
+		return
+	}
+	writeLine(w, "Paragraphs that drift most:")
+	for _, segment := range explanation.Segments {
+		writef(w, "  #%d (%.1fσ; %s %s): %s\n",
+			segment.Index, segment.Z, segment.Feature, segment.Direction, segment.Excerpt)
 	}
 }
 
@@ -95,14 +101,13 @@ type featureDriftJSON struct {
 }
 
 type segmentJSON struct {
-	Index       int     `json:"index"`
-	Kind        string  `json:"kind"`
-	Excerpt     string  `json:"excerpt"`
-	Z           float64 `json:"z"`
-	TopFeature  string  `json:"top_feature"`
-	TopCategory string  `json:"top_category"`
-	TopZ        float64 `json:"top_z"`
-	Direction   string  `json:"direction"`
+	Index     int     `json:"index"`
+	Kind      string  `json:"kind"`
+	Excerpt   string  `json:"excerpt"`
+	Feature   string  `json:"feature"`
+	Category  string  `json:"category"`
+	Z         float64 `json:"z"`
+	Direction string  `json:"direction"`
 }
 
 // splitDrifts separates the prioritized drift list into its high-level and
@@ -152,14 +157,13 @@ func toSegmentJSON(segments []profile.SegmentDrift) []segmentJSON {
 	out := make([]segmentJSON, 0, len(segments))
 	for _, segment := range segments {
 		out = append(out, segmentJSON{
-			Index:       segment.Index,
-			Kind:        segment.Kind,
-			Excerpt:     segment.Excerpt,
-			Z:           round4(segment.Z),
-			TopFeature:  segment.TopFeature,
-			TopCategory: segment.TopCategory,
-			TopZ:        round4(segment.TopZ),
-			Direction:   segment.Direction,
+			Index:     segment.Index,
+			Kind:      segment.Kind,
+			Excerpt:   segment.Excerpt,
+			Feature:   segment.Feature,
+			Category:  segment.Category,
+			Z:         round4(segment.Z),
+			Direction: segment.Direction,
 		})
 	}
 	return out

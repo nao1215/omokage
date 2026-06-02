@@ -147,8 +147,11 @@ func TestCheckJSONOutput(t *testing.T) {
 			Feature string `json:"feature"`
 		} `json:"low_level_drift"`
 		Segments []struct {
-			Index      int    `json:"index"`
-			TopFeature string `json:"top_feature"`
+			Index     int     `json:"index"`
+			Feature   string  `json:"feature"`
+			Category  string  `json:"category"`
+			Z         float64 `json:"z"`
+			Direction string  `json:"direction"`
 		} `json:"segments"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
@@ -165,6 +168,71 @@ func TestCheckJSONOutput(t *testing.T) {
 	}
 	if payload.HighLevel[0].Priority != 1 {
 		t.Fatalf("expected the first high-level drift to have priority 1, got %d", payload.HighLevel[0].Priority)
+	}
+	// The register-flipped draft must localize to the register feature, and every
+	// reported segment must carry a corresponding z above the reporting bar.
+	if len(payload.Segments) == 0 {
+		t.Fatal("expected at least one localized segment for the register-flipped draft")
+	}
+	for _, segment := range payload.Segments {
+		if segment.Feature == "" || segment.Z < 1.0 {
+			t.Fatalf("segment #%d has no actionable feature: %+v", segment.Index, segment)
+		}
+	}
+	if payload.Segments[0].Feature != "polite sentence-ending ratio" {
+		t.Fatalf("expected register drift to lead the localization, got %q", payload.Segments[0].Feature)
+	}
+}
+
+func TestCheckPlainOutputStaysClean(t *testing.T) {
+	t.Parallel()
+
+	workDir := trainedProject(t)
+	writeTestFile(t, filepath.Join(workDir, "draft.txt"),
+		"今日はとても良い天気です。散歩に出かけました。気持ちが良かったです。")
+
+	code, stdout, stderr := runApp(t, workDir, "check", "--author", "me", "draft.txt")
+	if code != 0 {
+		t.Fatalf("plain check failed: stderr=%q", stderr)
+	}
+	if !strings.Contains(stdout, "Similarity:") {
+		t.Fatalf("plain check stdout missing the score: %q", stdout)
+	}
+	// The output is captured (not a terminal), so the discoverability tip must be
+	// suppressed on both streams: a pipe, a redirect, a $(...) capture, or an LLM
+	// harness sees only the result. The tip is shown only at an interactive
+	// console; the flags stay discoverable through help.
+	if strings.Contains(stdout, "Tip:") {
+		t.Fatalf("captured stdout must not carry the tip: %q", stdout)
+	}
+	if strings.Contains(stderr, "Tip:") {
+		t.Fatalf("captured stderr must not carry the tip: %q", stderr)
+	}
+}
+
+func TestCheckExplainOmitsTip(t *testing.T) {
+	t.Parallel()
+
+	workDir := trainedProject(t)
+	writeTestFile(t, filepath.Join(workDir, "draft.txt"),
+		"今日はとても良い天気です。散歩に出かけました。気持ちが良かったです。")
+
+	_, stdout, stderr := runApp(t, workDir, "check", "--author", "me", "--explain", "draft.txt")
+	if strings.Contains(stdout, "Tip:") || strings.Contains(stderr, "Tip:") {
+		t.Fatalf("the detailed report must not repeat the tip: stdout=%q stderr=%q", stdout, stderr)
+	}
+}
+
+func TestRootHelpSurfacesExplain(t *testing.T) {
+	t.Parallel()
+
+	// Discoverability lives in the always-available help, not in every check run.
+	code, stdout, _ := runApp(t, t.TempDir(), "help")
+	if code != 0 {
+		t.Fatalf("help failed with code %d", code)
+	}
+	if !strings.Contains(stdout, "--explain") {
+		t.Fatalf("root help should mention --explain, got %q", stdout)
 	}
 }
 
