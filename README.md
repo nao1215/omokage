@@ -120,7 +120,7 @@ Differences:
 
 Similarity runs from 0 to 100 and shows how close the text sits to the learned style. Differences lists the features that moved the most, such as the sentence-ending register (敬体 / 常体), the balance of kanji and kana, function-word and character n-gram usage, sentence length, and layout. omokage compares style rather than topic, so writing about something new in your usual voice still scores high.
 
-For final tuning, add `--explain` to lead with the high-level, editable features (register, script balance, shape), each with the draft's value, your trained mean ± spread, a z-score, and a fix priority, plus the paragraphs that drift most. `--format json` prints the same data for an LLM to read between rewrites. Both are opt-in, so plain `check` stays fast.
+For final tuning, add `--explain` to lead with the high-level, editable features (register, script balance, structure), each with the draft's value, your trained mean ± spread, a z-score, and a fix priority, followed by the low-level function-word and n-gram drift as supporting detail and the paragraphs that drift most. `--format json` prints the same data for an LLM to read between rewrites. Both are opt-in, so plain `check` stays fast.
 
 ```shell
 $ omokage check --author me --explain examples/draft-lost-voice.md
@@ -132,9 +132,15 @@ High-level style differences (fix these first):
        target 0.000  reference 1.000 ± 0.000  (50.0σ)
   2. kanji ratio is higher than reference [script]
        target 0.489  reference 0.213 ± 0.025  (10.9σ)
+  ...
+
+Low-level fingerprint drift (supporting detail):
+  - character n-gram "する" is higher than reference  (9.7σ)
+  - function word "する" is higher than reference  (9.6σ)
+  ...
 
 Paragraphs that drift most:
-  #4 (11.0σ; polite sentence-ending ratio lower): 特別な行為は一切実施していない。しかしながら…
+  #2 (50.0σ; polite sentence-ending ratio lower): 雨天時は在宅で過ごすケースが多い。特段の活動は行わない。ただし窓に当たる降雨音を聴取することで、精神…
 ```
 
 ![explain demo](./doc/img/explain.gif)
@@ -164,8 +170,8 @@ You never have to touch `profiles/*.db` directly.
 $ omokage list                 # bare names, one per line (pipe-friendly)
 me
 $ omokage list --long          # trained_at, file count, and source(s)
-AUTHOR  TRAINED            FILES  SOURCE
-me      2026-06-01 09:14   9      /home/me/writing/posts (+1 more)
+AUTHOR  TRAINED               FILES  SOURCE
+me      2026-06-01 09:14 JST  9      /home/me/writing/posts (+1 more)
 $ omokage show --author me      # how a profile was trained (--format json too)
 $ omokage rename --author me --to watashi
 $ omokage remove --author watashi
