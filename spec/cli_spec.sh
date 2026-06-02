@@ -87,4 +87,37 @@ Describe 'omokage CLI surface'
       The stderr should be present
     End
   End
+
+  Describe 'help <subcommand> mirrors <subcommand> --help'
+    # `omokage help check` should behave exactly like `omokage check --help`:
+    # success, and the same usage text on stderr.
+    It 'routes help check to check --help'
+      When run "$OMOKAGE_BIN" help check
+      The status should be success
+      The stderr should include 'Score how closely'
+      The stderr should include 'Usage: omokage check'
+      The stderr should include '--explain'
+    End
+
+    It 'routes help init to init --help'
+      When run "$OMOKAGE_BIN" help init
+      The status should be success
+      The stderr should include 'Usage: omokage init'
+      The stderr should include '--name'
+    End
+
+    It 'still prints the root help for bare help'
+      When run "$OMOKAGE_BIN" help
+      The status should be success
+      The output should include 'omokage analyzes writing style'
+      The output should include 'Commands:'
+    End
+
+    It 'fails on help for an unknown command'
+      When run "$OMOKAGE_BIN" help frobnicate
+      The status should be failure
+      The stderr should include 'unknown command'
+      The stdout should include 'Commands:'
+    End
+  End
 End

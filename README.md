@@ -141,8 +141,8 @@ You never have to touch `profiles/*.db` directly.
 $ omokage list                 # bare names, one per line (pipe-friendly)
 me
 $ omokage list --long          # trained_at, file count, and source directory
-AUTHOR        TRAINED            FILES  SOURCE
-me (default)  2026-06-01 09:14   8      /home/me/writing/posts
+AUTHOR  TRAINED            FILES  SOURCE
+me      2026-06-01 09:14   8      /home/me/writing/posts
 $ omokage show --author me      # how a profile was trained (--format json too)
 $ omokage rename --author me --to watashi
 $ omokage remove --author watashi

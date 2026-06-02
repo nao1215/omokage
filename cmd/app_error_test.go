@@ -185,6 +185,69 @@ func TestRunListWithoutProject(t *testing.T) {
 	}
 }
 
+func TestRunHelpSubcommandMatchesDashHelp(t *testing.T) {
+	t.Parallel()
+
+	// `omokage help <command>` must be identical to `omokage <command> --help` in
+	// both content and exit code.
+	for _, name := range []string{"check", "init", "train", "diff", "list", "show", "remove", "rename"} {
+		helpCode, helpOut, helpErr := runApp(t, t.TempDir(), "help", name)
+		dashCode, dashOut, dashErr := runApp(t, t.TempDir(), name, "--help")
+		if helpCode != 0 || dashCode != 0 {
+			t.Fatalf("%s: expected exit 0, got help=%d dash=%d", name, helpCode, dashCode)
+		}
+		if helpOut != dashOut || helpErr != dashErr {
+			t.Fatalf("%s: `help %s` differs from `%s --help`\nhelp stdout=%q stderr=%q\ndash stdout=%q stderr=%q",
+				name, name, name, helpOut, helpErr, dashOut, dashErr)
+		}
+	}
+}
+
+func TestRunHelpUnknownCommandFails(t *testing.T) {
+	t.Parallel()
+
+	code, _, stderr := runApp(t, t.TempDir(), "help", "frobnicate")
+	if code != 1 {
+		t.Fatalf("expected exit 1 for `help frobnicate`, got %d", code)
+	}
+	if !strings.Contains(stderr, "unknown command") {
+		t.Fatalf("expected unknown command message, got %q", stderr)
+	}
+}
+
+func TestRunMissingArgMessages(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"check missing FILE", []string{"check"}, "missing FILE"},
+		{"diff missing FILE_B", []string{"diff", "a.md"}, "missing FILE_B"},
+		{"train missing DIRECTORY", []string{"train", "--author", "me"}, "missing DIRECTORY"},
+		{"train missing --author", []string{"train", "examples/posts"}, "missing --author"},
+		{"remove missing --author", []string{"remove"}, "missing --author"},
+		{"rename missing --to", []string{"rename", "--author", "me"}, "missing --to"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, _, stderr := runApp(t, t.TempDir(), tc.args...)
+			if code != 1 {
+				t.Fatalf("expected exit 1, got %d", code)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Fatalf("expected stderr to contain %q, got %q", tc.want, stderr)
+			}
+			// The usage text must still follow the direct error.
+			if !strings.Contains(stderr, "Usage: omokage") {
+				t.Fatalf("expected usage after the error, got %q", stderr)
+			}
+		})
+	}
+}
+
 func TestRunDiffWithoutProjectUsesDefaults(t *testing.T) {
 	t.Parallel()
 

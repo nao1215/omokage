@@ -95,6 +95,11 @@ func (a *App) Run(args []string) int {
 
 	switch args[0] {
 	case "help", "-h", "--help":
+		// `omokage help` is the root help; `omokage help <command>` is the same as
+		// `omokage <command> --help`, so users can reach a command's usage either way.
+		if args[0] == "help" && len(args) > 1 {
+			return a.runHelp(args[1])
+		}
 		a.printRootHelp()
 		return 0
 	case "init":
@@ -118,6 +123,26 @@ func (a *App) Run(args []string) int {
 		return 0
 	default:
 		writef(a.stderr, "unknown command: %s\n\n", args[0])
+		a.printRootHelp()
+		return 1
+	}
+}
+
+// runHelp implements `omokage help <command>`. For a command that has a usage
+// screen it dispatches to `<command> --help`, so the two spellings stay identical
+// in content and exit code. An unknown name fails the same way the root dispatcher
+// does, rather than silently falling back to the root help.
+func (a *App) runHelp(name string) int {
+	switch name {
+	case "init", "train", "check", "diff", "list", "show", "remove", "rename":
+		return a.Run([]string{name, "--help"})
+	case "help", "version":
+		// These have no flags and no per-command usage screen; the root help already
+		// documents them, so point there with a success exit.
+		a.printRootHelp()
+		return 0
+	default:
+		writef(a.stderr, "unknown command: %s\n\n", name)
 		a.printRootHelp()
 		return 1
 	}
@@ -256,7 +281,15 @@ func (a *App) runTrain(args []string) int {
 	if code, ok := parseArgs(flagSet, args); !ok {
 		return code
 	}
-	if strings.TrimSpace(*author) == "" || flagSet.NArg() != 1 {
+	if strings.TrimSpace(*author) == "" {
+		return a.usageError(flagSet, "missing --author")
+	}
+	switch flagSet.NArg() {
+	case 1:
+		// exactly one DIRECTORY, as required
+	case 0:
+		return a.usageError(flagSet, "missing DIRECTORY")
+	default:
 		flagSet.Usage()
 		return 1
 	}
@@ -352,7 +385,12 @@ func (a *App) runCheck(args []string) int {
 	if code, ok := parseArgs(flagSet, args); !ok {
 		return code
 	}
-	if flagSet.NArg() != 1 {
+	switch flagSet.NArg() {
+	case 1:
+		// exactly one FILE, as required
+	case 0:
+		return a.usageError(flagSet, "missing FILE")
+	default:
 		flagSet.Usage()
 		return 1
 	}
@@ -467,7 +505,14 @@ func (a *App) runDiff(args []string) int {
 	if code, ok := parseArgs(flagSet, args); !ok {
 		return code
 	}
-	if flagSet.NArg() != 2 {
+	switch flagSet.NArg() {
+	case 2:
+		// exactly two files, as required
+	case 0:
+		return a.usageError(flagSet, "missing FILE_A and FILE_B")
+	case 1:
+		return a.usageError(flagSet, "missing FILE_B")
+	default:
 		flagSet.Usage()
 		return 1
 	}
@@ -672,7 +717,10 @@ func (a *App) runRemove(args []string) int {
 	if code, ok := parseArgs(flagSet, args); !ok {
 		return code
 	}
-	if strings.TrimSpace(*author) == "" || flagSet.NArg() != 0 {
+	if strings.TrimSpace(*author) == "" {
+		return a.usageError(flagSet, "missing --author")
+	}
+	if flagSet.NArg() != 0 {
 		flagSet.Usage()
 		return 1
 	}
@@ -738,7 +786,13 @@ func (a *App) runRename(args []string) int {
 	if code, ok := parseArgs(flagSet, args); !ok {
 		return code
 	}
-	if strings.TrimSpace(*author) == "" || strings.TrimSpace(*to) == "" || flagSet.NArg() != 0 {
+	if strings.TrimSpace(*author) == "" {
+		return a.usageError(flagSet, "missing --author")
+	}
+	if strings.TrimSpace(*to) == "" {
+		return a.usageError(flagSet, "missing --to")
+	}
+	if flagSet.NArg() != 0 {
 		flagSet.Usage()
 		return 1
 	}
@@ -876,6 +930,15 @@ func parseArgs(flagSet *flag.FlagSet, args []string) (code int, ok bool) {
 		return 1, false
 	}
 	return 0, true
+}
+
+// usageError reports a missing or invalid argument directly on stderr, then prints
+// the command's usage and returns exit code 1. Centralizing it keeps the "what is
+// missing" wording and the message-then-usage layout consistent across commands.
+func (a *App) usageError(flagSet *flag.FlagSet, msg string) int {
+	writef(a.stderr, "%s\n\n", msg)
+	flagSet.Usage()
+	return 1
 }
 
 // printFlagDefaults lists a command's flags using the double-dash spelling shown
