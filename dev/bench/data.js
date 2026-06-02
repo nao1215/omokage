@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780395687025,
+  "lastUpdate": 1780410930501,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -2568,6 +2568,150 @@ window.BENCHMARK_DATA = {
             "value": 921,
             "unit": "allocs/op",
             "extra": "3699 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "CHIKAMATSU Naohiro",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "10ebb9e0997a5685670c36d37cdf9f6b0b9d47c5",
+          "message": "feat(term): learn and report per-profile notation preferences without an LLM (#4)\n\n* feat(term): learn and report per-profile notation preferences without an LLM\n\nExtract a learning corpus's preferred surface forms (DB vs データベース) during\ntrain and store them profile-locally in SQLite, with no LLM, network, or\nexternal dictionary, deterministically.\n\n- internal/term: deterministic extraction. normalized_key folds case/full-width\n  ASCII/edge punctuation; group_key merges concepts only via corpus-declared\n  alias bridges (Japanese phrase ↔ uppercase acronym, or \"以下、X\"). A shared\n  acronym glossing several phrases is dropped rather than chaining them.\n  Preferred surface order: doc_count, then count, then ascending surface.\n- storage: term_group/term_variant tables added to the schema (auto-created for\n  older profiles), with SaveTerms/LoadTerms in a transaction.\n- show --format json gains term_preferences; check --format json gains\n  term_warnings (a separate layer that never affects the similarity score).\n  occurrences is reserved for future line/column data.\n- Plain check output and existing similarity scoring are unchanged.\n\n* fix(term): degrade show --format json when term load fails; condense README\n\n- runShow JSON path no longer exits 1 on a LoadTerms error; it warns on stderr\n  and emits the summary with an empty term list, matching the comment and the\n  check path (addresses CodeRabbit review).\n- Trim the README term-preferences section: plain prose, no bold or extra\n  decoration, drop the verbose JSON samples.\n\n* test(term): cover corpus IO, empty/noise inputs, union determinism, and storage errors\n\nClose behavioral gaps: ExtractCorpus file reading and read errors, empty/\nwhitespace/code-only documents yielding no groups, stripNoise excluding\nURL/front-matter/HTML tokens, group_key independence from union order, CheckText\non an empty profile, keepASCII filtering, and LoadTerms on a corrupt file.\ninternal/term coverage 92.9% -> 97.8%.",
+          "timestamp": "2026-06-02T23:34:39+09:00",
+          "tree_id": "aea07aa5845c26af1d6e46ff8d36484a89505043",
+          "url": "https://github.com/nao1215/omokage/commit/10ebb9e0997a5685670c36d37cdf9f6b0b9d47c5"
+        },
+        "date": 1780410929667,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 864837,
+            "unit": "ns/op\t  352087 B/op\t    3066 allocs/op",
+            "extra": "1532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 864837,
+            "unit": "ns/op",
+            "extra": "1532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 352087,
+            "unit": "B/op",
+            "extra": "1532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 3066,
+            "unit": "allocs/op",
+            "extra": "1532 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 3878208,
+            "unit": "ns/op\t  102944 B/op\t      34 allocs/op",
+            "extra": "289 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 3878208,
+            "unit": "ns/op",
+            "extra": "289 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 102944,
+            "unit": "B/op",
+            "extra": "289 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "289 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 260272,
+            "unit": "ns/op\t   86042 B/op\t     864 allocs/op",
+            "extra": "4608 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 260272,
+            "unit": "ns/op",
+            "extra": "4608 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 86042,
+            "unit": "B/op",
+            "extra": "4608 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 864,
+            "unit": "allocs/op",
+            "extra": "4608 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 236966,
+            "unit": "ns/op\t   83025 B/op\t     762 allocs/op",
+            "extra": "4812 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 236966,
+            "unit": "ns/op",
+            "extra": "4812 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 83025,
+            "unit": "B/op",
+            "extra": "4812 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 762,
+            "unit": "allocs/op",
+            "extra": "4812 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 320767,
+            "unit": "ns/op\t  213220 B/op\t     921 allocs/op",
+            "extra": "3414 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 320767,
+            "unit": "ns/op",
+            "extra": "3414 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 213220,
+            "unit": "B/op",
+            "extra": "3414 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 921,
+            "unit": "allocs/op",
+            "extra": "3414 times\n4 procs"
           }
         ]
       }
