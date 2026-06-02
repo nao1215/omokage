@@ -33,6 +33,8 @@ type Features struct {
 	MarkdownStructureDensity bool
 	PoliteEndingRatio        bool
 	PlainEndingRatio         bool
+	LexicalFrequency         bool
+	CharNgramFrequency       bool
 }
 
 type Storage struct {
@@ -59,6 +61,8 @@ func Default(projectName string) Config {
 			MarkdownStructureDensity: true,
 			PoliteEndingRatio:        true,
 			PlainEndingRatio:         true,
+			LexicalFrequency:         true,
+			CharNgramFrequency:       true,
 		},
 		Storage: Storage{
 			ProfileDir: "./profiles",
@@ -137,6 +141,10 @@ func Parse(data []byte) (Config, error) {
 				cfg.Features.PoliteEndingRatio = parsed
 			case "plain_ending_ratio":
 				cfg.Features.PlainEndingRatio = parsed
+			case "lexical_frequency":
+				cfg.Features.LexicalFrequency = parsed
+			case "char_ngram_frequency":
+				cfg.Features.CharNgramFrequency = parsed
 			}
 		case "storage":
 			parsed, err := parseString(value)
@@ -179,6 +187,8 @@ paragraph_length_variance = %t
 markdown_structure_frequency = %t
 polite_ending_ratio = %t
 plain_ending_ratio = %t
+lexical_frequency = %t
+char_ngram_frequency = %t
 
 [storage]
 profile_dir = %q
@@ -198,6 +208,8 @@ cache_dir = %q
 		c.Features.MarkdownStructureDensity,
 		c.Features.PoliteEndingRatio,
 		c.Features.PlainEndingRatio,
+		c.Features.LexicalFrequency,
+		c.Features.CharNgramFrequency,
 		c.Storage.ProfileDir,
 		c.Storage.CacheDir,
 	)

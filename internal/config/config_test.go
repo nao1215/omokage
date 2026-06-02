@@ -11,6 +11,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dyer.toml")
 	expected := Default("writing-lab")
 	expected.Features.KatakanaRatio = false
+	expected.Features.LexicalFrequency = false
+	expected.Features.CharNgramFrequency = false
 
 	if err := Save(path, expected); err != nil {
 		t.Fatal(err)
@@ -26,6 +28,15 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	if actual.Features.KatakanaRatio != expected.Features.KatakanaRatio {
 		t.Fatalf("katakana ratio mismatch: got=%v want=%v", actual.Features.KatakanaRatio, expected.Features.KatakanaRatio)
+	}
+	if actual.Features.LexicalFrequency != expected.Features.LexicalFrequency {
+		t.Fatalf("lexical frequency mismatch: got=%v want=%v", actual.Features.LexicalFrequency, expected.Features.LexicalFrequency)
+	}
+	if actual.Features.CharNgramFrequency != expected.Features.CharNgramFrequency {
+		t.Fatalf("char n-gram frequency mismatch: got=%v want=%v", actual.Features.CharNgramFrequency, expected.Features.CharNgramFrequency)
+	}
+	if !Default("x").Features.LexicalFrequency || !Default("x").Features.CharNgramFrequency {
+		t.Fatal("expected the new authorship features to default to enabled")
 	}
 	if actual.Storage.ProfileDir != "./profiles" {
 		t.Fatalf("unexpected profile dir: %q", actual.Storage.ProfileDir)

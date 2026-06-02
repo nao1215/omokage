@@ -92,11 +92,19 @@ paragraph_length_variance = true
 markdown_structure_frequency = true
 polite_ending_ratio = true
 plain_ending_ratio = true
+lexical_frequency = true
+char_ngram_frequency = true
 
 [storage]
 profile_dir = "./profiles"
 cache_dir = "./cache"
 ```
+
+`lexical_frequency` and `char_ngram_frequency` are language-independent
+authorship features: the relative frequencies of function words and of character
+bi-/tri-grams. They let `dyer` tell apart two authors writing in the same
+register (and work for English as well as Japanese), while the register and
+script features still catch a wholesale register shift such as an imitation.
 
 ## Implemented Style Features
 

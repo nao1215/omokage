@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,7 +50,11 @@ CREATE TABLE IF NOT EXISTS profile (
   std_plain_ending_ratio REAL NOT NULL,
   document_count INTEGER NOT NULL,
   sentence_count INTEGER NOT NULL,
-  character_count INTEGER NOT NULL
+  character_count INTEGER NOT NULL,
+  mean_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
+  std_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
+  mean_char_ngrams TEXT NOT NULL DEFAULT '{}',
+  std_char_ngrams TEXT NOT NULL DEFAULT '{}'
 );`
 
 func SaveProfile(path string, record profile.Record) error {
@@ -81,9 +86,11 @@ INSERT INTO profile (
   std_kanji_ratio, std_hiragana_ratio, std_katakana_ratio,
   std_paragraph_length_variance, std_markdown_structure_density,
   std_polite_ending_ratio, std_plain_ending_ratio,
-  document_count, sentence_count, character_count
+  document_count, sentence_count, character_count,
+  mean_lexical_frequencies, std_lexical_frequencies,
+  mean_char_ngrams, std_char_ngrams
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   author = excluded.author,
   source_dir = excluded.source_dir,
@@ -117,7 +124,11 @@ ON CONFLICT(id) DO UPDATE SET
   std_plain_ending_ratio = excluded.std_plain_ending_ratio,
   document_count = excluded.document_count,
   sentence_count = excluded.sentence_count,
-  character_count = excluded.character_count;
+  character_count = excluded.character_count,
+  mean_lexical_frequencies = excluded.mean_lexical_frequencies,
+  std_lexical_frequencies = excluded.std_lexical_frequencies,
+  mean_char_ngrams = excluded.mean_char_ngrams,
+  std_char_ngrams = excluded.std_char_ngrams;
 `
 
 	mean := record.Distribution.Mean
@@ -159,8 +170,25 @@ ON CONFLICT(id) DO UPDATE SET
 		record.Distribution.DocumentCount,
 		record.Distribution.SentenceCount,
 		record.Distribution.CharacterCount,
+		marshalLexical(mean.LexicalFrequencies),
+		marshalLexical(std.LexicalFrequencies),
+		marshalLexical(mean.CharNgrams),
+		marshalLexical(std.CharNgrams),
 	)
 	return err
+}
+
+// marshalLexical serializes a lexical frequency vector to JSON for storage,
+// defaulting to an empty object so the NOT NULL column always has a value.
+func marshalLexical(vector map[string]float64) string {
+	if len(vector) == 0 {
+		return "{}"
+	}
+	encoded, err := json.Marshal(vector)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
 }
 
 func LoadProfile(path string) (profile.Record, error) {
@@ -209,12 +237,20 @@ SELECT
   std_plain_ending_ratio,
   document_count,
   sentence_count,
-  character_count
+  character_count,
+  mean_lexical_frequencies,
+  std_lexical_frequencies,
+  mean_char_ngrams,
+  std_char_ngrams
 FROM profile
 WHERE id = 1
 `)
 
 	var trainedAt string
+	var meanLexicalJSON string
+	var stdLexicalJSON string
+	var meanNgramJSON string
+	var stdNgramJSON string
 	var record profile.Record
 	var mean feature.Metrics
 	var std feature.Metrics
@@ -253,6 +289,10 @@ WHERE id = 1
 		&dist.DocumentCount,
 		&dist.SentenceCount,
 		&dist.CharacterCount,
+		&meanLexicalJSON,
+		&stdLexicalJSON,
+		&meanNgramJSON,
+		&stdNgramJSON,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return profile.Record{}, fmt.Errorf("profile not found: %s", path)
@@ -264,8 +304,25 @@ WHERE id = 1
 	if err != nil {
 		return profile.Record{}, err
 	}
+	mean.LexicalFrequencies = unmarshalLexical(meanLexicalJSON)
+	std.LexicalFrequencies = unmarshalLexical(stdLexicalJSON)
+	mean.CharNgrams = unmarshalLexical(meanNgramJSON)
+	std.CharNgrams = unmarshalLexical(stdNgramJSON)
 	dist.Mean = mean
 	dist.StdDev = std
 	record.Distribution = dist
 	return record, nil
+}
+
+// unmarshalLexical deserializes a stored lexical frequency vector, returning an
+// empty map for missing or malformed data so scoring can index it safely.
+func unmarshalLexical(encoded string) map[string]float64 {
+	vector := make(map[string]float64)
+	if encoded == "" || encoded == "{}" {
+		return vector
+	}
+	if err := json.Unmarshal([]byte(encoded), &vector); err != nil {
+		return make(map[string]float64)
+	}
+	return vector
 }

@@ -26,6 +26,15 @@ type Metrics struct {
 	PlainEndingRatio         float64
 	SentenceCount            int
 	CharacterCount           int
+	// LexicalFrequencies holds the per-function-word relative frequency vector
+	// keyed by LexicalVocabulary(). On a Distribution's Mean/StdDev it carries
+	// the per-word mean and standard deviation across the corpus.
+	LexicalFrequencies map[string]float64
+	// CharNgrams holds the relative frequency of character bigrams. For a single
+	// document it covers every bigram that occurs; on a Distribution's Mean/StdDev
+	// it is restricted to the author's most frequent bigrams (see aggregateCharNgrams),
+	// which form a language-independent stylometric fingerprint.
+	CharNgrams map[string]float64
 }
 
 // Distribution captures the per-document spread of a corpus. An author profile
@@ -149,7 +158,38 @@ func Aggregate(perDoc []Metrics) Distribution {
 		accumulateSquaredError(&dist.StdDev, m, dist.Mean)
 	}
 	finalizeStdDev(&dist.StdDev, n)
+
+	aggregateLexical(&dist, perDoc, n)
+	aggregateCharNgrams(&dist, perDoc, n)
 	return dist
+}
+
+// aggregateLexical computes the per-word mean and population standard deviation
+// of the lexical frequency vector across the corpus. The vocabulary is fixed,
+// so a word absent from a document simply contributes a zero for that document.
+func aggregateLexical(dist *Distribution, perDoc []Metrics, n float64) {
+	meanVec := make(map[string]float64, len(lexicalVocabulary))
+	for _, m := range perDoc {
+		for _, word := range lexicalVocabulary {
+			meanVec[word] += m.LexicalFrequencies[word]
+		}
+	}
+	for word := range meanVec {
+		meanVec[word] /= n
+	}
+
+	stdVec := make(map[string]float64, len(lexicalVocabulary))
+	for _, m := range perDoc {
+		for _, word := range lexicalVocabulary {
+			stdVec[word] += square(m.LexicalFrequencies[word] - meanVec[word])
+		}
+	}
+	for word := range stdVec {
+		stdVec[word] = math.Sqrt(stdVec[word] / n)
+	}
+
+	dist.Mean.LexicalFrequencies = meanVec
+	dist.StdDev.LexicalFrequencies = stdVec
 }
 
 func accumulateSquaredError(acc *Metrics, sample Metrics, mean Metrics) {
@@ -190,6 +230,12 @@ func square(value float64) float64 {
 
 func ExtractText(text string) Metrics {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	// prose drops code so the authorship features (function words, character
+	// n-grams) measure the author's natural-language habits rather than the
+	// shared vocabulary of code samples — which otherwise dominates technical
+	// posts and masks the difference between two technical authors. The
+	// structural features below still see the original text.
+	prose := stripCode(normalized)
 	sentences := splitSentences(normalized)
 	sentenceLengths := make([]float64, 0, len(sentences))
 	for _, sentence := range sentences {
@@ -252,6 +298,8 @@ func ExtractText(text string) Metrics {
 		PlainEndingRatio:         ratio(plainCount, japaneseSentences),
 		SentenceCount:            len(sentences),
 		CharacterCount:           characterCount,
+		LexicalFrequencies:       lexicalFrequencies(prose),
+		CharNgrams:               charBigrams(prose),
 	}
 }
 

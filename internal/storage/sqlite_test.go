@@ -33,6 +33,8 @@ func TestSaveLoadProfile(t *testing.T) {
 				MarkdownStructureDensity: 0.15,
 				PoliteEndingRatio:        0.82,
 				PlainEndingRatio:         0.04,
+				LexicalFrequencies:       map[string]float64{"の": 0.08, "the": 0.0},
+				CharNgrams:               map[string]float64{"です": 0.01, "th": 0.0},
 			},
 			StdDev: feature.Metrics{
 				AverageSentenceLength:    2.5,
@@ -48,6 +50,8 @@ func TestSaveLoadProfile(t *testing.T) {
 				MarkdownStructureDensity: 0.05,
 				PoliteEndingRatio:        0.12,
 				PlainEndingRatio:         0.03,
+				LexicalFrequencies:       map[string]float64{"の": 0.01, "the": 0.0},
+				CharNgrams:               map[string]float64{"です": 0.002, "th": 0.0},
 			},
 			DocumentCount:  3,
 			SentenceCount:  8,
@@ -87,6 +91,18 @@ func TestSaveLoadProfile(t *testing.T) {
 	}
 	if !actual.TrainedAt.Equal(expected.TrainedAt) {
 		t.Fatalf("trained_at mismatch: got=%s want=%s", actual.TrainedAt, expected.TrainedAt)
+	}
+	if got := actual.Distribution.Mean.LexicalFrequencies["の"]; got != 0.08 {
+		t.Fatalf("mean lexical frequency mismatch: got=%f want=%f", got, 0.08)
+	}
+	if got := actual.Distribution.StdDev.LexicalFrequencies["の"]; got != 0.01 {
+		t.Fatalf("std lexical frequency mismatch: got=%f want=%f", got, 0.01)
+	}
+	if got := actual.Distribution.Mean.CharNgrams["です"]; got != 0.01 {
+		t.Fatalf("mean char n-gram mismatch: got=%f want=%f", got, 0.01)
+	}
+	if got := actual.Distribution.StdDev.CharNgrams["です"]; got != 0.002 {
+		t.Fatalf("std char n-gram mismatch: got=%f want=%f", got, 0.002)
 	}
 }
 

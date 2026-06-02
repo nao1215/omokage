@@ -34,6 +34,11 @@ const zScoreScale = 3.0
 // Roughly one standard deviation away from the author's mean.
 const driftThreshold = 1.0
 
+// lexicalDistanceScale converts the small absolute gap between two documents'
+// function-word frequencies into a [0,1] distance comparable to the ratio
+// features, so the diff command weighs lexical drift alongside structure.
+const lexicalDistanceScale = 8.0
+
 // featureSpec ties a stylistic feature to its config flag and accessor so that
 // scoring, drift reporting, and direct comparison share a single definition.
 type featureSpec struct {
@@ -72,7 +77,10 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 	}
 
 	results := make([]scored, 0, len(featureSpecs))
-	totalZ := 0.0
+	registerZ := 0.0
+	registerCount := 0
+	otherZ := 0.0
+	otherCount := 0
 	for _, spec := range featureSpecs {
 		if !spec.enabled(flags) {
 			continue
@@ -90,7 +98,17 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 			continue
 		}
 		z := math.Abs(observed-mean) / stdFloor(std, mean, spec.isRatio)
-		totalZ += z
+		// The register markers (polite/plain endings) are kept in their own group:
+		// a register shift is a decisive impostor signal (an LLM imitation), but
+		// averaged in with the other structural features it gets diluted, and those
+		// features add noise to same-author comparisons. See combineDrift.
+		if registerLabels[spec.label] {
+			registerZ += z
+			registerCount++
+		} else {
+			otherZ += z
+			otherCount++
+		}
 		results = append(results, scored{
 			label:     spec.label,
 			z:         z,
@@ -98,11 +116,60 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 		})
 	}
 
-	if len(results) == 0 {
+	functionWordZ := 0.0
+	functionWordCount := 0
+	if flags.LexicalFrequency {
+		for _, word := range feature.LexicalVocabulary() {
+			mean := reference.Mean.LexicalFrequencies[word]
+			std := reference.StdDev.LexicalFrequencies[word]
+			observed := target.LexicalFrequencies[word]
+			// A function word neither the author nor the target ever uses (e.g.
+			// English words in a Japanese-only corpus) carries no signal, so it is
+			// dropped exactly like the degenerate scalar features above.
+			if mean == 0 && std == 0 && observed == 0 {
+				continue
+			}
+			z := math.Abs(observed-mean) / lexicalStdFloor(std, mean)
+			functionWordZ += z
+			functionWordCount++
+			results = append(results, scored{
+				label:     fmt.Sprintf("function word %q", word),
+				z:         z,
+				direction: direction(mean, observed),
+			})
+		}
+	}
+
+	ngramZ := 0.0
+	ngramCount := 0
+	if flags.CharNgramFrequency {
+		for ngram, mean := range reference.Mean.CharNgrams {
+			std := reference.StdDev.CharNgrams[ngram]
+			observed := target.CharNgrams[ngram]
+			if mean == 0 && std == 0 && observed == 0 {
+				continue
+			}
+			z := math.Abs(observed-mean) / lexicalStdFloor(std, mean)
+			ngramZ += z
+			ngramCount++
+			results = append(results, scored{
+				label:     fmt.Sprintf("character n-gram %q", ngram),
+				z:         z,
+				direction: direction(mean, observed),
+			})
+		}
+	}
+
+	if registerCount+otherCount+functionWordCount+ngramCount == 0 {
 		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
 	}
 
-	meanZ := totalZ / float64(len(results))
+	meanZ := combineDrift(groupDrift{
+		register:     meanOf(registerZ, registerCount),
+		other:        meanOf(otherZ, otherCount),
+		functionWord: meanOf(functionWordZ, functionWordCount),
+		ngram:        meanOf(ngramZ, ngramCount),
+	})
 	similarity := clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
 
 	sort.SliceStable(results, func(i int, j int) bool {
@@ -144,6 +211,13 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 		left := spec.value(reference)
 		right := spec.value(target)
+		// A feature absent from both documents carries no stylistic signal — e.g.
+		// the Japanese script and register features for two English texts. Counting
+		// it as a perfect match would inflate the similarity, so it is dropped, the
+		// same way Score skips degenerate features.
+		if left == 0 && right == 0 {
+			continue
+		}
 		distance := relativeDistance(left, right)
 		if spec.isRatio {
 			distance = math.Min(1, math.Abs(left-right))
@@ -154,6 +228,49 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 			distance:  distance,
 			direction: direction(left, right),
 		})
+	}
+
+	if flags.LexicalFrequency {
+		for _, word := range feature.LexicalVocabulary() {
+			left := reference.LexicalFrequencies[word]
+			right := target.LexicalFrequencies[word]
+			if left == 0 && right == 0 {
+				continue
+			}
+			// Function-word frequencies are tiny absolute numbers, so the raw gap is
+			// scaled to land on the same [0,1] distance footing as the ratio features.
+			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
+			total += distance
+			results = append(results, scored{
+				label:     fmt.Sprintf("function word %q", word),
+				distance:  distance,
+				direction: direction(left, right),
+			})
+		}
+	}
+
+	if flags.CharNgramFrequency {
+		seen := make(map[string]struct{}, len(reference.CharNgrams)+len(target.CharNgrams))
+		for ngram := range reference.CharNgrams {
+			seen[ngram] = struct{}{}
+		}
+		for ngram := range target.CharNgrams {
+			seen[ngram] = struct{}{}
+		}
+		for ngram := range seen {
+			left := reference.CharNgrams[ngram]
+			right := target.CharNgrams[ngram]
+			if left == 0 && right == 0 {
+				continue
+			}
+			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
+			total += distance
+			results = append(results, scored{
+				label:     fmt.Sprintf("character n-gram %q", ngram),
+				distance:  distance,
+				direction: direction(left, right),
+			})
+		}
 	}
 
 	if len(results) == 0 {
@@ -192,6 +309,106 @@ func stdFloor(std float64, mean float64, isRatio bool) float64 {
 		return math.Max(std, 0.02)
 	}
 	return math.Max(std, math.Max(0.1*math.Abs(mean), 1.0))
+}
+
+// lexWeight is the share of the similarity drift attributed to the lexical
+// fingerprint when both structural and lexical features are present. Averaging
+// every feature together would let dozens of low-signal function words dilute a
+// strong structural marker (such as a register shift), so the two groups are
+// averaged independently and then blended. This keeps register/script detection
+// intact while letting the lexical fingerprint separate same-register authors.
+// registerLabels marks the sentence-ending features that form the register
+// group. They are scored separately from the other structural features so a
+// register shift is not diluted, and so they do not add noise to same-register
+// comparisons. See combineDrift.
+var registerLabels = map[string]bool{
+	"polite sentence-ending ratio": true,
+	"plain sentence-ending ratio":  true,
+}
+
+// registerWeight and otherStructWeight scale how much the register group and
+// the remaining structural features add on top of the lexical fingerprint,
+// which is the primary, language-independent authorship signal. The lexical
+// group separates same-register and English authors; register is kept as a
+// clean, undiluted term so a large register shift (an LLM imitation written in
+// the opposite register, or cross-language text) still drives the score down,
+// while an author's own mild register variation only nudges it. The structural
+// remainder barely separates authors on its own, so it nudges least.
+const (
+	registerWeight    = 1.0
+	otherStructWeight = 0.05
+	// registerTolerance is the register z-score an author may reach through their
+	// own variation (e.g. nao writes mostly 敬体 but slips into 常体 in some posts)
+	// before it counts as a register shift. Only the excess above this hinge is
+	// charged, so a genuine same-register document is untouched while a wholesale
+	// register flip — an LLM imitation in the opposite register, or cross-language
+	// text whose register features collapse to zero — is penalized sharply.
+	registerTolerance = 2.5
+)
+
+// groupDrift holds the mean z-score of each feature group for a single
+// comparison. A zero mean means the group had no active features. Function words
+// and character n-grams are kept apart so the larger n-gram vocabulary cannot
+// outweigh the function-word signal; combineDrift averages whichever of the two
+// are present into a single lexical contribution.
+type groupDrift struct {
+	register     float64
+	other        float64
+	functionWord float64
+	ngram        float64
+}
+
+// combineDrift fuses the feature groups into a single drift figure. The lexical
+// fingerprint leads, since it separates same-register and English authors; it is
+// the equal-weight mean of the function-word and character-n-gram sub-signals so
+// that neither the ~150 function words nor the ~400 n-grams dominate by sheer
+// count. The register group is added only for its excess above registerTolerance,
+// so an author's own mild register variation is ignored while a wholesale
+// register flip (an LLM imitation, cross-language text) is charged sharply. The
+// noisy structural remainder only nudges the result.
+func combineDrift(g groupDrift) float64 {
+	lexical := meanOfPresent(g.functionWord, g.ngram)
+	registerExcess := g.register - registerTolerance
+	if registerExcess < 0 {
+		registerExcess = 0
+	}
+	return lexical + registerWeight*registerExcess + otherStructWeight*g.other
+}
+
+// meanOfPresent averages the sub-signals that are actually present. A sub-signal
+// of zero means its group had no active features (e.g. the function-word group
+// for a target sharing no vocabulary, or either group when disabled), so it is
+// excluded from the average rather than dragging it toward zero.
+func meanOfPresent(values ...float64) float64 {
+	sum := 0.0
+	count := 0
+	for _, value := range values {
+		if value > 0 {
+			sum += value
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return sum / float64(count)
+}
+
+// meanOf reduces a running z-score sum to its mean, returning zero for an empty
+// group so an absent group contributes nothing to combineDrift.
+func meanOf(sum float64, count int) float64 {
+	if count == 0 {
+		return 0
+	}
+	return sum / float64(count)
+}
+
+// lexicalStdFloor stabilizes the standardization for function-word frequencies,
+// which are small numbers (a common particle sits near 0.05). A fixed ratio
+// floor like stdFloor's 0.02 would swamp them, so the floor scales with the
+// word's own mean and keeps only a tiny absolute guard for near-constant words.
+func lexicalStdFloor(std float64, mean float64) float64 {
+	return math.Max(std, math.Max(0.12*mean, 0.0015))
 }
 
 func direction(reference float64, target float64) string {

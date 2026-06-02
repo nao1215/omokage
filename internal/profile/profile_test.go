@@ -41,6 +41,81 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+func TestScoreDetectsRegisterShift(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+		"先週は仕事が忙しかったです。それでも毎日きちんと休めました。",
+	}
+	dist := distributionFromTexts(polite)
+
+	politeTarget := feature.ExtractText("今日は良い天気です。散歩に出かけます。とても気持ちが良いです。")
+	plainTarget := feature.ExtractText("今日は良い天気である。散歩に出かける。とても気持ちが良いのだった。")
+
+	politeScore := Score(dist, politeTarget, flags)
+	plainScore := Score(dist, plainTarget, flags)
+	if plainScore.Similarity >= politeScore.Similarity {
+		t.Fatalf("expected a register shift to lower similarity: polite=%d plain=%d",
+			politeScore.Similarity, plainScore.Similarity)
+	}
+}
+
+func TestScoreRejectsCrossLanguageText(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	japanese := []string{
+		"私は毎朝コーヒーを飲みます。新聞を読みながらゆっくり過ごします。",
+		"昼休みには散歩をします。季節の移り変わりを感じられて楽しいです。",
+		"夜は本を読んでから眠ります。静かな時間がとても好きです。",
+		"休日は料理を作ります。家族と一緒に食べる時間が幸せです。",
+	}
+	dist := distributionFromTexts(japanese)
+
+	english := feature.ExtractText("This is an English paragraph about the weather and the city. " +
+		"It contains the kind of function words that an English writer would use every day.")
+	comparison := Score(dist, english, flags)
+	if comparison.Similarity > 40 {
+		t.Fatalf("expected cross-language text to score low, got %d", comparison.Similarity)
+	}
+}
+
+func TestScoreSeparatesLexicalFingerprint(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	authorA := []string{
+		"私はコーヒーが好きです。毎朝必ず一杯飲みます。香りがとても良いからです。",
+		"昨日もカフェに行きました。新しい豆を試しました。深い味わいでした。",
+		"週末は自分で豆を挽きます。手間をかけるほど美味しくなります。",
+		"友人にもコーヒーを勧めました。彼もすっかり気に入ったようです。",
+	}
+	distA := distributionFromTexts(authorA)
+
+	ownText := feature.ExtractText("今日もコーヒーを淹れました。豆の香りに癒やされます。やはり毎日飲みたいです。")
+	otherText := feature.ExtractText("きょうもサッカーをしたよ。仲間と思いきり走ったんだ。最高に楽しい一日だったなあ。")
+
+	ownScore := Score(distA, ownText, flags)
+	otherScore := Score(distA, otherText, flags)
+	if otherScore.Similarity >= ownScore.Similarity {
+		t.Fatalf("expected a same-register impostor to score lower than the author's own text: own=%d other=%d",
+			ownScore.Similarity, otherScore.Similarity)
+	}
+}
+
+func distributionFromTexts(texts []string) feature.Distribution {
+	perDoc := make([]feature.Metrics, 0, len(texts))
+	for _, text := range texts {
+		perDoc = append(perDoc, feature.ExtractText(text))
+	}
+	return feature.Aggregate(perDoc)
+}
+
 func sampleDistribution() feature.Distribution {
 	return feature.Distribution{
 		Mean: feature.Metrics{
