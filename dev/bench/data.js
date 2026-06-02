@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780410930501,
+  "lastUpdate": 1780411791701,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -2712,6 +2712,150 @@ window.BENCHMARK_DATA = {
             "value": 921,
             "unit": "allocs/op",
             "extra": "3414 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "CHIKAMATSU Naohiro",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "14fbe86f58dafe6011bedfa22fe0dd6c6173e4bf",
+          "message": "fix(feature): measure prose only — strip HTML/front matter/links and fix segment fence context (#6)\n\n* fix(feature): measure prose only — strip HTML/front matter/links and fix segment fence context (#5)\n\nTwo non-prose leaks made check --explain/--format json report drift on content\nthe author cannot edit (mermaid diagrams, HTML blocks, CLI transcripts, image and\nlink URLs, YAML front matter):\n\n- ExtractSegments split the raw document into paragraphs before stripping code, so\n  a fenced block containing a blank line lost its fence context and its interior\n  was measured as prose. It now strips on the whole document first, then splits.\n- Non-prose was only partly removed. Introduce feature.StripNonProse — the single\n  cleaner for front matter, fenced/inline code, Markdown images, link URLs (visible\n  text kept), raw URLs, HTML tags, and entities — and run both whole-document and\n  per-paragraph extraction through it. The term package now reuses it instead of\n  its own stripNoise (removed), so the two stay in sync.\n\nAdds regression tests (HTML stripping, fenced block with a blank line, HTML-only\nparagraph, StripNonProse). BenchmarkExtractText ~+10%, well under the gate.\n\n* test(e2e): add shellspec coverage for term preferences and prose-only extraction\n\nDrive the built binary end to end:\n- show --format json reports the bridged DB/データベース group with separate\n  normalized_key and group_key; show text stays a provenance summary.\n- check --format json flags a non-preferred surface (ＤＢ/データベース) and emits\n  an empty term_warnings array when the preferred surface is used; plain check is\n  unchanged and silent on stderr.\n- check --explain/--format json never reports a fenced mermaid diagram, an HTML\n  block, YAML front matter, or a link URL as a drifting paragraph (Issue #5).",
+          "timestamp": "2026-06-02T23:48:56+09:00",
+          "tree_id": "f57c07b387ec4f95ad55fddeea26e39f2e8e1c34",
+          "url": "https://github.com/nao1215/omokage/commit/14fbe86f58dafe6011bedfa22fe0dd6c6173e4bf"
+        },
+        "date": 1780411790813,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 948800,
+            "unit": "ns/op\t  389645 B/op\t    3084 allocs/op",
+            "extra": "1684 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 948800,
+            "unit": "ns/op",
+            "extra": "1684 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 389645,
+            "unit": "B/op",
+            "extra": "1684 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 3084,
+            "unit": "allocs/op",
+            "extra": "1684 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 3721909,
+            "unit": "ns/op\t  102944 B/op\t      34 allocs/op",
+            "extra": "321 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 3721909,
+            "unit": "ns/op",
+            "extra": "321 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 102944,
+            "unit": "B/op",
+            "extra": "321 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "321 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 256734,
+            "unit": "ns/op\t   86043 B/op\t     864 allocs/op",
+            "extra": "4482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 256734,
+            "unit": "ns/op",
+            "extra": "4482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 86043,
+            "unit": "B/op",
+            "extra": "4482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 864,
+            "unit": "allocs/op",
+            "extra": "4482 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 240331,
+            "unit": "ns/op\t   83025 B/op\t     762 allocs/op",
+            "extra": "4929 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 240331,
+            "unit": "ns/op",
+            "extra": "4929 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 83025,
+            "unit": "B/op",
+            "extra": "4929 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 762,
+            "unit": "allocs/op",
+            "extra": "4929 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 315635,
+            "unit": "ns/op\t  213222 B/op\t     921 allocs/op",
+            "extra": "3654 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 315635,
+            "unit": "ns/op",
+            "extra": "3654 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 213222,
+            "unit": "B/op",
+            "extra": "3654 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 921,
+            "unit": "allocs/op",
+            "extra": "3654 times\n4 procs"
           }
         ]
       }
