@@ -888,6 +888,7 @@ func (a *App) printRootHelp() {
 	writeLine(a.stdout, "  rename   Rename an author profile.")
 	writeLine(a.stdout, "  remove   Remove an author profile.")
 	writeLine(a.stdout, "  version  Print the omokage version.")
+	writeLine(a.stdout, "  help     Show this help, or 'omokage help <command>' for one command.")
 	writeLine(a.stdout)
 	writeLine(a.stdout, `omokage uses a local project (omokage.toml found by walking up from the current`)
 	writeLine(a.stdout, `directory) when one exists, otherwise the global store at $OMOKAGE_HOME, or your`)
@@ -896,7 +897,7 @@ func (a *App) printRootHelp() {
 	writeLine(a.stdout)
 	writeLine(a.stdout, `check picks the author from --author, then default_author, then the only profile.`)
 	writeLine(a.stdout)
-	writeLine(a.stdout, `Run "omokage <command> --help" to see a command's arguments.`)
+	writeLine(a.stdout, `Run "omokage <command> --help" (or "omokage help <command>") to see a command's arguments.`)
 }
 
 // profileSummaryJSON is the machine-readable form of `show`.

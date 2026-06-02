@@ -234,6 +234,11 @@ func TestRootHelpSurfacesExplain(t *testing.T) {
 	if !strings.Contains(stdout, "--explain") {
 		t.Fatalf("root help should mention --explain, got %q", stdout)
 	}
+	// The `help` command and the `help <command>` entry point must be discoverable
+	// from the root help, not just from `<command> --help`.
+	if !strings.Contains(stdout, "help") || !strings.Contains(stdout, "omokage help <command>") {
+		t.Fatalf("root help should advertise the help command, got %q", stdout)
+	}
 }
 
 func TestCheckRejectsUnknownFormat(t *testing.T) {

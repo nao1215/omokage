@@ -22,6 +22,13 @@ Describe 'omokage CLI surface'
       The output should include 'Usage:'
       The output should include 'train'
     End
+
+    It 'advertises the help command and help <command> entry point'
+      When run "$OMOKAGE_BIN" --help
+      The status should be success
+      The output should include 'help'
+      The output should include 'omokage help <command>'
+    End
   End
 
   Describe 'version'
