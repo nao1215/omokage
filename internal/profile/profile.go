@@ -222,7 +222,18 @@ func Explain(reference feature.Distribution, target feature.Metrics, segments []
 // dead features (e.g. Japanese script in an English corpus) do not distort the
 // result.
 func featureDrifts(reference feature.Distribution, target feature.Metrics, flags config.Features) []FeatureDrift {
-	drifts := scalarDrifts(reference, target, flags, func(featureSpec) bool { return true })
+	// Preallocate to the maximum number of drifts so the fingerprint appends below
+	// do not repeatedly grow and copy the backing array — the function-word and
+	// n-gram loops add hundreds of entries and dominated Score's allocations.
+	capacity := len(featureSpecs)
+	if flags.LexicalFrequency {
+		capacity += len(feature.LexicalVocabulary())
+	}
+	if flags.CharNgramFrequency {
+		capacity += len(reference.Mean.CharNgrams)
+	}
+	drifts := make([]FeatureDrift, 0, capacity)
+	drifts = append(drifts, scalarDrifts(reference, target, flags, everySpec)...)
 
 	if flags.LexicalFrequency {
 		for _, word := range feature.LexicalVocabulary() {
@@ -302,16 +313,16 @@ func similarityFromDrifts(drifts []FeatureDrift) int {
 }
 
 // topDifferences renders the default `check` output: the three highest-z drifts
-// above the threshold, phrased as before. Sorting a copy leaves the caller's
-// slice order untouched.
+// above the threshold, phrased as before. It sorts the slice in place; Score is
+// its only caller and discards the slice afterwards, so avoiding the defensive
+// copy keeps the hot path from duplicating the whole fingerprint drift list.
 func topDifferences(drifts []FeatureDrift) []string {
-	sorted := append([]FeatureDrift(nil), drifts...)
-	sort.SliceStable(sorted, func(i int, j int) bool {
-		return sorted[i].Z > sorted[j].Z
+	sort.SliceStable(drifts, func(i int, j int) bool {
+		return drifts[i].Z > drifts[j].Z
 	})
 
 	differences := make([]string, 0, 3)
-	for _, drift := range sorted {
+	for _, drift := range drifts {
 		if drift.Z < driftThreshold {
 			continue
 		}
@@ -439,6 +450,12 @@ func locateSegmentDrift(reference feature.Distribution, segments []feature.Segme
 		out = out[:segmentExplainLimit]
 	}
 	return out
+}
+
+// everySpec selects every feature; it is the include predicate for whole-document
+// scoring, which considers all features.
+func everySpec(featureSpec) bool {
+	return true
 }
 
 // localizableSpec selects the features that are meaningful and editable at the
