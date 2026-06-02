@@ -285,25 +285,29 @@ func square(value float64) float64 {
 
 func ExtractText(text string) Metrics {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
-	// prose drops code so the authorship features (function words, character
-	// n-grams) measure the author's natural-language habits rather than the
-	// shared vocabulary of code samples — which otherwise dominates technical
-	// posts and masks the difference between two technical authors. The
-	// structural features below still see the original text.
+	// Every feature is measured on the code-stripped prose, not the raw text, so
+	// the score reflects the author's natural-language habits rather than the
+	// shared vocabulary and layout of code samples. Authorship features (function
+	// words, character n-grams) need this most — code otherwise dominates technical
+	// posts and masks the difference between two technical authors — but the
+	// structural features (sentence length, punctuation, Markdown density) are
+	// measured on the same prose too, so adding a fenced code block to a draft no
+	// longer manufactures false drift. This matches the documented promise that
+	// code blocks are removed before the features are measured.
 	prose := stripCode(normalized)
-	sentences := splitSentences(normalized)
+	sentences := splitSentences(prose)
 	sentenceLengths := make([]float64, 0, len(sentences))
 	for _, sentence := range sentences {
 		sentenceLengths = append(sentenceLengths, float64(contentRuneCount(sentence)))
 	}
 
-	paragraphs := splitParagraphs(normalized)
+	paragraphs := splitParagraphs(prose)
 	paragraphLengths := make([]float64, 0, len(paragraphs))
 	for _, paragraph := range paragraphs {
 		paragraphLengths = append(paragraphLengths, float64(contentRuneCount(paragraph)))
 	}
 
-	lines := strings.Split(normalized, "\n")
+	lines := strings.Split(prose, "\n")
 	var bulletLines int
 	var structureLines int
 	var nonEmptyLines int
@@ -321,21 +325,21 @@ func ExtractText(text string) Metrics {
 		}
 	}
 
-	characterCount := contentRuneCount(normalized)
+	characterCount := contentRuneCount(prose)
 	if characterCount == 0 {
 		return Metrics{}
 	}
 
-	newlineCount := strings.Count(normalized, "\n")
-	punctuationCount := punctuationRuneCount(normalized)
-	conjunctionCount, tokenCount := conjunctionStats(normalized)
-	kanjiCount, hiraganaCount, katakanaCount := scriptCounts(normalized)
+	newlineCount := strings.Count(prose, "\n")
+	punctuationCount := punctuationRuneCount(prose)
+	conjunctionCount, tokenCount := conjunctionStats(prose)
+	kanjiCount, hiraganaCount, katakanaCount := scriptCounts(prose)
 	scriptTotal := max(kanjiCount+hiraganaCount+katakanaCount, 1)
-	politeCount, plainCount := sentenceEndingStats(normalized)
+	politeCount, plainCount := sentenceEndingStats(prose)
 	// Normalize sentence-ending forms by Japanese terminators (。！？) rather than
 	// len(sentences): the latter also splits on Latin "." and would over-count
 	// sentences in technical prose (version numbers, decimals), diluting the ratio.
-	japaneseSentences := max(strings.Count(normalized, "。")+strings.Count(normalized, "！")+strings.Count(normalized, "？"), 1)
+	japaneseSentences := max(strings.Count(prose, "。")+strings.Count(prose, "！")+strings.Count(prose, "？"), 1)
 
 	return Metrics{
 		AverageSentenceLength:    mean(sentenceLengths),
@@ -365,18 +369,32 @@ func supportedExtension(path string) bool {
 
 func splitSentences(text string) []string {
 	replacer := strings.NewReplacer("!", ". ", "?", ". ", "。", ". ", "！", ". ", "？", ". ")
-	normalized := replacer.Replace(text)
-	parts := strings.Split(normalized, ".")
-	sentences := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
+	runes := []rune(replacer.Replace(text))
+	sentences := make([]string, 0)
+	start := 0
+	for i, r := range runes {
+		if r != '.' {
+			continue
+		}
+		// A period ends a sentence only when it is the last character or is followed
+		// by whitespace. A period wedged between non-space characters — version
+		// numbers (1.2.3), domains (example.com), decimals (3.14), abbreviations —
+		// is part of a token, not a boundary, so it must not split the sentence.
+		if i+1 < len(runes) && !unicode.IsSpace(runes[i+1]) {
+			continue
+		}
+		if trimmed := strings.TrimSpace(string(runes[start : i+1])); trimmed != "" {
+			sentences = append(sentences, trimmed)
+		}
+		start = i + 1
+	}
+	if start < len(runes) {
+		if trimmed := strings.TrimSpace(string(runes[start:])); trimmed != "" {
 			sentences = append(sentences, trimmed)
 		}
 	}
 	if len(sentences) == 0 {
-		trimmed := strings.TrimSpace(text)
-		if trimmed != "" {
+		if trimmed := strings.TrimSpace(text); trimmed != "" {
 			return []string{trimmed}
 		}
 	}
@@ -453,19 +471,110 @@ func splitWords(text string) []string {
 
 // sentenceEndingStats counts Japanese sentence-ending forms. The contrast
 // between the polite register (敬体: です・ます) and the plain register
-// (常体: だ・である) is one of the strongest stylistic markers in Japanese
-// writing, and a sharp shift between the two is exactly the kind of drift omokage
-// aims to surface.
+// (常体: だ・である・verb/adjective stop) is one of the strongest stylistic
+// markers in Japanese writing, and a sharp shift between the two is exactly the
+// kind of drift omokage aims to surface.
+//
+// Each clause terminated by a Japanese full stop (。！？) is classified by the
+// predicate that closes it rather than by counting fixed substrings anywhere in
+// the text. That is what lets the plain register be detected at all: 常体 is not
+// a short list of words (である・だった) but the open class of plain-form
+// predicates — verbs (する・行く・読んだ), i-adjectives (高い・ない), and the
+// copula (だ) — which a substring scan cannot enumerate.
 func sentenceEndingStats(text string) (polite int, plain int) {
-	politeForms := []string{"ます", "です", "ました", "でした", "ません"}
-	plainForms := []string{"である", "だった", "だが"}
-	for _, form := range politeForms {
-		polite += strings.Count(text, form)
-	}
-	for _, form := range plainForms {
-		plain += strings.Count(text, form)
+	for _, clause := range japaneseClauses(text) {
+		switch classifyEnding(clause) {
+		case endingPolite:
+			polite++
+		case endingPlain:
+			plain++
+		}
 	}
 	return polite, plain
+}
+
+const (
+	endingNone = iota
+	endingPolite
+	endingPlain
+)
+
+// japaneseClauses splits text into the substrings that each end at a Japanese
+// sentence terminator (。！？). A trailing fragment with no terminator is not a
+// completed sentence and is dropped, so the count matches the 。！？ denominator
+// ExtractText normalizes by.
+func japaneseClauses(text string) []string {
+	clauses := make([]string, 0)
+	var current strings.Builder
+	for _, r := range text {
+		if r == '。' || r == '！' || r == '？' {
+			if clause := strings.TrimSpace(current.String()); clause != "" {
+				clauses = append(clauses, clause)
+			}
+			current.Reset()
+			continue
+		}
+		current.WriteRune(r)
+	}
+	return clauses
+}
+
+// classifyEnding decides whether a clause ends in the polite or the plain
+// register, or in neither (English, a noun stop/体言止め, a bare particle). The
+// polite check runs first because polite auxiliaries (です・ます) end in kana
+// that the plain heuristic would otherwise claim.
+func classifyEnding(clause string) int {
+	core := trimSentenceTail(clause)
+	if core == "" {
+		return endingNone
+	}
+	if hasPoliteEnding(core) {
+		return endingPolite
+	}
+	if hasPlainEnding(core) {
+		return endingPlain
+	}
+	return endingNone
+}
+
+// sentenceTailRunes are closing quotes/brackets and interjective sentence-final
+// particles that sit after the predicate. Trimming them exposes the verb,
+// adjective, or copula that carries the register (行きますか → 行きます,
+// するなよ → するな).
+const sentenceTailRunes = "かねよわなぞぜさのっ」』）)】"
+
+func trimSentenceTail(clause string) string {
+	runes := []rune(clause)
+	for len(runes) > 0 && strings.ContainsRune(sentenceTailRunes, runes[len(runes)-1]) {
+		runes = runes[:len(runes)-1]
+	}
+	return string(runes)
+}
+
+func hasPoliteEnding(core string) bool {
+	politeForms := []string{"です", "ます", "でした", "ました", "ません", "でしょう", "ましょう"}
+	for _, form := range politeForms {
+		if strings.HasSuffix(core, form) {
+			return true
+		}
+	}
+	return false
+}
+
+// plainEndingKana are the kana that close a plain-form predicate: the godan and
+// ichidan verb endings (る・く・す…) and the i-adjective い. A clause that is not
+// polite and ends in one of these is treated as 常体.
+const plainEndingKana = "うくぐすつづぬふぶむゆるい"
+
+func hasPlainEnding(core string) bool {
+	plainForms := []string{"である", "であった", "だった", "だろう", "なかった", "ない", "た", "だ"}
+	for _, form := range plainForms {
+		if strings.HasSuffix(core, form) {
+			return true
+		}
+	}
+	runes := []rune(core)
+	return strings.ContainsRune(plainEndingKana, runes[len(runes)-1])
 }
 
 func scriptCounts(text string) (kanji int, hiragana int, katakana int) {

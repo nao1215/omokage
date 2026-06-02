@@ -271,6 +271,21 @@ func (a *App) runInit(args []string) int {
 		}
 	}
 
+	// A local init inside an existing project's subtree creates a nested store
+	// that silently shadows the enclosing one in this directory only — a common
+	// footgun, since discovery walks parents and the new store looks empty
+	// (list/check no longer see the enclosing profiles). Warn before creating it,
+	// naming the enclosing config, but still proceed: nesting is occasionally
+	// intentional. Checked from the parent so the not-yet-created config here is
+	// never the match.
+	if !*global {
+		if enclosing, findErr := project.FindRoot(filepath.Dir(dir)); findErr == nil {
+			writef(a.stderr, "warning: this store is nested inside an existing omokage store at %s.\n",
+				filepath.Join(enclosing, project.ConfigFileName))
+			writef(a.stderr, "Commands run here will use this local store, not the enclosing one.\n")
+		}
+	}
+
 	cfg, err := project.Init(dir, *name)
 	if err != nil {
 		writeLine(a.stderr, err)
@@ -525,12 +540,15 @@ func (a *App) runDiff(args []string) int {
 	}
 
 	// diff only needs the feature set, not a profile, so it works without any
-	// store: an active scope supplies the features, and its absence falls back to
-	// the defaults rather than erroring.
+	// store: an active scope supplies the features, and the absence of a store —
+	// no local project, or --global with no global store created — falls back to
+	// the defaults rather than erroring. That keeps `diff --global a b` working for
+	// wrappers and habits that always pass --global, matching plain `diff a b`. A
+	// store that exists but is broken (a malformed --config) is still surfaced.
 	cfg := config.Default(filepath.Base(a.workDir))
 	if scope, err := a.resolveScope(scopeF); err == nil {
 		cfg = scope.Config
-	} else if !errors.Is(err, project.ErrProjectNotFound) {
+	} else if !errors.Is(err, project.ErrProjectNotFound) && !errors.Is(err, project.ErrStoreNotFound) {
 		writeLine(a.stderr, err)
 		return 1
 	}
@@ -630,7 +648,7 @@ func (a *App) runList(args []string) int {
 			name += " (default)"
 		}
 		writef(tw, "%s\t%s\t%d\t%s\n",
-			name, record.TrainedAt.Format("2006-01-02 15:04 MST"), record.FileCount, sourceColumn(record))
+			name, record.TrainedAt.Local().Format("2006-01-02 15:04 MST"), record.FileCount, sourceColumn(record))
 	}
 	return flushTab(a.stderr, tw)
 }
@@ -704,7 +722,9 @@ func (a *App) runShow(args []string) int {
 	if record.Author == strings.TrimSpace(scope.Config.Defaults.Author) {
 		writeLine(a.stdout, "Default: yes")
 	}
-	writef(a.stdout, "Trained: %s\n", record.TrainedAt.Format("2006-01-02 15:04:05 MST"))
+	// Displayed in the local zone (stored as UTC) so the time matches the user's
+	// wall clock rather than reading as a confusingly off-by-hours UTC stamp.
+	writef(a.stdout, "Trained: %s\n", record.TrainedAt.Local().Format("2006-01-02 15:04:05 MST"))
 	writef(a.stdout, "Files: %d\n", record.FileCount)
 	// One input keeps the familiar single "Source:" line; several switch to a
 	// numbered "Sources (N):" block so the full provenance is visible. The line is

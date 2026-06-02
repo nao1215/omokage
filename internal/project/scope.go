@@ -132,13 +132,13 @@ func resolveExplicit(o ResolveOptions) (Scope, error) {
 
 func resolveGlobal(home string) (Scope, error) {
 	if home == "" {
-		return Scope{}, errors.New("global store location is unknown; set OMOKAGE_HOME")
+		return Scope{}, fmt.Errorf("global store location is unknown; set OMOKAGE_HOME: %w", ErrStoreNotFound)
 	}
 	cfgPath := filepath.Join(home, ConfigFileName)
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return Scope{}, fmt.Errorf("no global omokage store at %s; run 'omokage init --global'", home)
+			return Scope{}, fmt.Errorf("no global omokage store at %s; run 'omokage init --global': %w", home, ErrStoreNotFound)
 		}
 		return Scope{}, err
 	}

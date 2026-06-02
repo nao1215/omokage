@@ -14,6 +14,13 @@ const ConfigFileName = "omokage.toml"
 
 var ErrProjectNotFound = errors.New("omokage project not found")
 
+// ErrStoreNotFound reports that a requested store does not exist yet: --global
+// with no global store created, or a global fallback whose home is unknown.
+// Commands that only need a feature set rather than a profile — diff — treat it,
+// like ErrProjectNotFound, as a cue to fall back to the built-in defaults instead
+// of failing.
+var ErrStoreNotFound = errors.New("omokage store not found")
+
 func Init(root string, name string) (config.Config, error) {
 	configPath := filepath.Join(root, ConfigFileName)
 	if _, err := os.Stat(configPath); err == nil {

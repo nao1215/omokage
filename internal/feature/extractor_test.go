@@ -45,6 +45,79 @@ func TestExtractTextDetectsSentenceEndings(t *testing.T) {
 	}
 }
 
+func TestExtractTextStripsCodeFromEveryFeature(t *testing.T) {
+	t.Parallel()
+
+	prose := "This is an ordinary English paragraph. It keeps two plain sentences.\n\n" +
+		"And a second paragraph that holds the same calm voice all the way through."
+	withCode := prose + "\n\n```go\nfunc main() {\n\tfor i := 0; i < 10; i++ {\n\t\t// a heading-looking # comment and a | pipe\n\t\tfmt.Println(i)\n\t}\n}\n```\n"
+
+	bare := ExtractText(prose)
+	coded := ExtractText(withCode)
+
+	// Code is removed before *every* feature is measured, not only the lexical and
+	// n-gram ones, so appending a fenced block must not move the structural
+	// features. Otherwise a draft scores as drifting purely for containing code.
+	if bare.SentenceCount != coded.SentenceCount {
+		t.Fatalf("sentence count moved by code block: %d vs %d", bare.SentenceCount, coded.SentenceCount)
+	}
+	if bare.AverageSentenceLength != coded.AverageSentenceLength {
+		t.Fatalf("average sentence length moved by code block: %f vs %f", bare.AverageSentenceLength, coded.AverageSentenceLength)
+	}
+	if bare.MarkdownStructureDensity != coded.MarkdownStructureDensity {
+		t.Fatalf("markdown density moved by code block: %f vs %f", bare.MarkdownStructureDensity, coded.MarkdownStructureDensity)
+	}
+	if bare.CharacterCount != coded.CharacterCount {
+		t.Fatalf("character count moved by code block: %d vs %d", bare.CharacterCount, coded.CharacterCount)
+	}
+	if bare.PunctuationFrequency != coded.PunctuationFrequency {
+		t.Fatalf("punctuation frequency moved by code block: %f vs %f", bare.PunctuationFrequency, coded.PunctuationFrequency)
+	}
+}
+
+func TestSplitSentencesKeepsInWordPeriodsTogether(t *testing.T) {
+	t.Parallel()
+
+	// Version numbers, domains, decimals, and abbreviations all carry an interior
+	// period that must not be read as a sentence boundary, which would inflate the
+	// sentence count and corrupt the sentence-length features for technical prose.
+	metrics := ExtractText("The build moved from 1.2.3 to 1.10.0 today. See example.com or v2.1 for details.")
+	if metrics.SentenceCount != 2 {
+		t.Fatalf("expected 2 sentences across version numbers and domains, got %d", metrics.SentenceCount)
+	}
+}
+
+func TestPlainEndingDetectsOpenClassPredicates(t *testing.T) {
+	t.Parallel()
+
+	// 常体 is the open class of plain-form predicates, not a short word list. Each
+	// of these ends a plain sentence and must register as plain, never polite.
+	plainCases := []string{
+		"毎朝公園を走る。",     // godan/ichidan verb, dictionary form
+		"彼は分厚い本を読んだ。",  // past plain (…んだ)
+		"その山はとても高い。",   // i-adjective
+		"もう時間がない。",     // negative ない
+		"これはただの水だ。",    // copula だ
+		"明日はきっと晴れである。", // copula である
+	}
+	for _, sentence := range plainCases {
+		m := ExtractText(sentence)
+		if m.PlainEndingRatio <= 0 {
+			t.Fatalf("expected plain ending for %q, got plain=%f polite=%f", sentence, m.PlainEndingRatio, m.PoliteEndingRatio)
+		}
+		if m.PoliteEndingRatio != 0 {
+			t.Fatalf("expected no polite ending for %q, got polite=%f", sentence, m.PoliteEndingRatio)
+		}
+	}
+
+	// A polite sentence trailing a question particle is still polite: the tail
+	// particle is trimmed before the form is read.
+	question := ExtractText("もう行きますか。")
+	if question.PoliteEndingRatio <= 0 || question.PlainEndingRatio != 0 {
+		t.Fatalf("expected polite ending for trailing-か sentence, got polite=%f plain=%f", question.PoliteEndingRatio, question.PlainEndingRatio)
+	}
+}
+
 func TestCollectFilesFiltersSupportedExtensions(t *testing.T) {
 	t.Parallel()
 
