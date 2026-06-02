@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e bench lint clean tools help
+.PHONY: build test test-e2e bench lint clean tools demo help
 
 APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
@@ -27,6 +27,19 @@ test-e2e: build ## Run shellspec end-to-end tests against the built binary
 
 bench: ## Run Go benchmarks for the hot paths
 	env GOOS=$(GOOS) $(GO_TEST) -bench=. -benchmem -run='^$$' ./internal/...
+
+DEMO_BIN  = /tmp/omokage
+DEMO_DIR  = /tmp/omokage-demo
+
+demo: build ## Regenerate the README GIFs from doc/img/*.tape (needs vhs)
+	@command -v vhs >/dev/null || { echo 'vhs is required: go install github.com/charmbracelet/vhs@latest'; exit 1; }
+	cp $(APP) $(DEMO_BIN)
+	rm -rf $(DEMO_DIR) && mkdir -p $(DEMO_DIR) && cp -r examples $(DEMO_DIR)/examples
+	vhs doc/img/demo.tape && mv demo.gif doc/img/demo.gif
+	rm -rf $(DEMO_DIR) && mkdir -p $(DEMO_DIR) && cp -r examples $(DEMO_DIR)/examples
+	vhs doc/img/explain.tape && mv explain.gif doc/img/explain.gif
+	rm -rf $(DEMO_DIR) $(DEMO_BIN)
+	@echo 'Wrote doc/img/demo.gif and doc/img/explain.gif'
 
 lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml

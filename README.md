@@ -109,6 +109,8 @@ Paragraphs that drift most:
   #4 (11.0σ; polite sentence-ending ratio lower): 特別な行為は一切実施していない。しかしながら…
 ```
 
+![explain demo](./doc/img/explain.gif)
+
 ## How it scores
 
 When you train an author, omokage reads every file, measures a set of stylistic features for each document, and stores their mean and spread in a SQLite database under `profiles/` (one database per author). The text itself is not kept, only the numbers.

@@ -1,14 +1,10 @@
 # omokage demo tape (https://github.com/charmbracelet/vhs)
 #
-# Regenerate the GIF:
-#   go build -o /tmp/omokage .          # build the CLI as `omokage`
-#   rm -rf /tmp/omokage-demo && mkdir -p /tmp/omokage-demo
-#   cp -r examples /tmp/omokage-demo/examples
-#   PATH=/tmp:$PATH vhs doc/img/demo.tape   # writes demo.gif, then move it:
-#   mv demo.gif doc/img/demo.gif
+# Regenerate with `make demo`, which builds the CLI, seeds a throwaway project
+# under /tmp/omokage-demo, runs this tape, and moves demo.gif into doc/img/.
 #
 # vhs v0.11 parses absolute Output paths oddly, so the tape writes a relative
-# demo.gif into the current directory and the GIF is moved into doc/img/ after.
+# demo.gif into the current directory and `make demo` moves it into doc/img/.
 
 Output demo.gif
 
