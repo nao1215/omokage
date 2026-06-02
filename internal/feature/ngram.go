@@ -51,25 +51,47 @@ func addNgrams(freq map[string]float64, runes []rune, order int) {
 // inlineCodePattern matches an inline code span delimited by backticks.
 var inlineCodePattern = regexp.MustCompile("`[^`]*`")
 
-// stripCode removes fenced code blocks (``` … ```) and inline code spans from
-// the text so that source code does not contribute to the authorship features.
-// Code shares vocabulary and character sequences across authors and would
-// otherwise drown out the natural-language signal in technical writing.
+// stripCode removes fenced code blocks and inline code spans from the text so
+// that source code does not contribute to the authorship features. Code shares
+// vocabulary and character sequences across authors and would otherwise drown
+// out the natural-language signal in technical writing. Both CommonMark fence
+// markers are recognized — backtick (``` … ```) and tilde (~~~ … ~~~) — and a
+// block is closed only by its own marker, so a tilde line inside a backtick
+// block (or vice versa) is treated as content, not a boundary.
 func stripCode(text string) string {
 	lines := strings.Split(text, "\n")
 	kept := make([]string, 0, len(lines))
-	inFence := false
+	fence := "" // marker that opened the current block ("```"/"~~~"), "" when outside
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
-			inFence = !inFence
+		trimmed := strings.TrimSpace(line)
+		if fence == "" {
+			if marker := fenceMarker(trimmed); marker != "" {
+				fence = marker
+				continue
+			}
+		} else if strings.HasPrefix(trimmed, fence) {
+			fence = ""
 			continue
 		}
-		if inFence {
+		if fence != "" {
 			continue
 		}
 		kept = append(kept, line)
 	}
 	return inlineCodePattern.ReplaceAllString(strings.Join(kept, "\n"), " ")
+}
+
+// fenceMarker reports the fenced-code marker a line opens with — "```" or "~~~",
+// the two markers CommonMark allows — or "" when the line is not a code fence.
+func fenceMarker(trimmed string) string {
+	switch {
+	case strings.HasPrefix(trimmed, "```"):
+		return "```"
+	case strings.HasPrefix(trimmed, "~~~"):
+		return "~~~"
+	default:
+		return ""
+	}
 }
 
 // normalizeForNgram lowercases the text and collapses any whitespace run into a

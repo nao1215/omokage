@@ -4,6 +4,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -72,6 +73,28 @@ func TestExtractTextStripsCodeFromEveryFeature(t *testing.T) {
 	}
 	if bare.PunctuationFrequency != coded.PunctuationFrequency {
 		t.Fatalf("punctuation frequency moved by code block: %f vs %f", bare.PunctuationFrequency, coded.PunctuationFrequency)
+	}
+}
+
+func TestStripCodeHandlesBacktickAndTildeFencesAlike(t *testing.T) {
+	t.Parallel()
+
+	prose := "Plain prose lives here. It carries two sentences.\n\n" +
+		"A second paragraph keeps exactly the same voice."
+	backtick := prose + "\n\n```go\nfunc main() { x := 1; _ = x }\n```\n"
+	tilde := prose + "\n\n~~~go\nfunc main() { x := 1; _ = x }\n~~~\n"
+
+	fromBacktick := ExtractText(backtick)
+	fromTilde := ExtractText(tilde)
+
+	// CommonMark allows either fence character; both are code and must be stripped
+	// identically, so the two documents yield the very same feature vector.
+	if !reflect.DeepEqual(fromTilde, fromBacktick) {
+		t.Fatalf("tilde fence not stripped like backtick fence:\ntilde=%+v\nbacktick=%+v", fromTilde, fromBacktick)
+	}
+	// The fence characters themselves must never leak into the n-gram fingerprint.
+	if _, ok := fromTilde.CharNgrams["~~"]; ok {
+		t.Fatalf("tilde fence leaked the '~~' bigram into the fingerprint")
 	}
 }
 

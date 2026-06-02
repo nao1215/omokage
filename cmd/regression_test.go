@@ -33,6 +33,41 @@ func TestDiffGlobalWithoutStoreFallsBack(t *testing.T) {
 	}
 }
 
+// TestDiffIgnoresTildeFencedCode guards that tilde code fences (~~~ … ~~~),
+// which CommonMark allows alongside backtick fences, are stripped before the
+// features are measured. Appending a tilde-fenced block to a prose file must
+// affect its self-similarity no differently than a backtick-fenced block does —
+// otherwise the README promise ("code blocks are removed before the features are
+// measured") holds only for backtick fences.
+func TestDiffIgnoresTildeFencedCode(t *testing.T) {
+	workDir := t.TempDir()
+	prose := "This is an ordinary English paragraph. It keeps two plain sentences.\n\n" +
+		"And a second paragraph that holds the same calm voice all the way through."
+	writeTestFile(t, filepath.Join(workDir, "prose.md"), prose)
+	writeTestFile(t, filepath.Join(workDir, "backtick.md"), prose+"\n\n```go\nfunc main() { fmt.Println(\"hi\") }\n```\n")
+	writeTestFile(t, filepath.Join(workDir, "tilde.md"), prose+"\n\n~~~go\nfunc main() { fmt.Println(\"hi\") }\n~~~\n")
+
+	similarityLine := func(a, b string) string {
+		code, stdout, stderr := runApp(t, workDir, "diff", a, b)
+		if code != 0 {
+			t.Fatalf("diff %s %s failed: %s", a, b, stderr)
+		}
+		for _, line := range strings.Split(stdout, "\n") {
+			if strings.HasPrefix(line, "Similarity:") {
+				return line
+			}
+		}
+		t.Fatalf("no similarity line in diff output:\n%s", stdout)
+		return ""
+	}
+
+	backtick := similarityLine("prose.md", "backtick.md")
+	tilde := similarityLine("prose.md", "tilde.md")
+	if tilde != backtick {
+		t.Fatalf("tilde fence should behave like backtick fence: tilde=%q backtick=%q", tilde, backtick)
+	}
+}
+
 // TestInitNestedWarnsButSucceeds guards the nested-store footgun: init inside an
 // existing project's subtree still creates the store (nesting is occasionally
 // intentional) but warns, naming the enclosing config, so a user does not
