@@ -159,12 +159,14 @@ func TestShortDocumentsWarnWhenMostAreShort(t *testing.T) {
 func TestMixedVoiceFlagsAnInterpretableFeature(t *testing.T) {
 	t.Parallel()
 
-	// Four polite documents and four plain ones: the register splits the corpus,
-	// so the mixed-voice finding should fire and name a register feature, not a
-	// noisy second-order feature like a variance.
+	// A register-split corpus: five mostly-polite documents and three plain ones.
+	// The uneven split lands the plain-ending ratio's relative spread well above the
+	// warning threshold (≈1.3, not on the 1.0 boundary), so the assertion does not
+	// hinge on floating-point rounding. The mixed-voice finding should fire and name
+	// a register feature, not a noisy second-order feature like a variance.
 	polite := styleMetrics(300, 30, 0.1, 0.3, 0.6, 0.1, 0.9, 0.0)
 	plain := styleMetrics(300, 30, 0.1, 0.3, 0.6, 0.1, 0.0, 0.9)
-	dist, docs := corpus(t, polite, polite, polite, polite, plain, plain, plain, plain)
+	dist, docs := corpus(t, polite, polite, polite, polite, polite, plain, plain, plain)
 	report := AssessCorpus(dist, docs, defaultFeatures())
 
 	finding, ok := findingByCode(report, "mixed_voice")
@@ -174,10 +176,10 @@ func TestMixedVoiceFlagsAnInterpretableFeature(t *testing.T) {
 	if !strings.Contains(finding.Summary, "ending ratio") {
 		t.Fatalf("mixed-voice should name a register feature, got %q", finding.Summary)
 	}
-	// A wholesale register split swings the feature as much as its own mean, which
+	// A wholesale register split swings the feature wider than its own mean, which
 	// is a warning, not a mild notice.
 	if finding.Severity != SeverityWarning {
-		t.Fatalf("a 50/50 register split should warn, got %v", finding.Severity)
+		t.Fatalf("a register-split corpus should warn, got %v", finding.Severity)
 	}
 }
 
