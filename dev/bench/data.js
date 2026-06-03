@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780411975484,
+  "lastUpdate": 1780493266370,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -3000,6 +3000,150 @@ window.BENCHMARK_DATA = {
             "value": 921,
             "unit": "allocs/op",
             "extra": "3543 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "CHIKAMATSU Naohiro",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "be58fe843d200389763f706b82539db5d163329f",
+          "message": "feat(quality): add doctor command and corpus-quality guidance (#8)\n\n* feat(quality): add doctor command and corpus-quality guidance\n\nAdd a corpus-quality layer so users can tell whether their training\nmaterial is solid before they trust the scores. A new doctor command reads\na corpus (training and writing nothing) and rates the reliability of\ncomparisons against it, naming a next action for too few documents, short\ndocuments, a mixed voice, or an out-of-place document; --format json emits\nthe same report. The same assessment surfaces as a terminal-only note after\ntrain and as reliability/quality_findings in show --format json.\n\nStylometric judgements stay in internal/profile (DocumentDivergence,\nLeaveOneOutDivergences, HighLevelSpreads, reusing the existing localizable\nfeature set and std floor); internal/quality holds only thresholds and\nwording. Outliers are measured leave-one-out so a single odd file is caught\neven on a small corpus. Help and README were rewritten for scannability and\nhonesty: output modes, --author as a purpose-named profile, corpus caveats,\nand an LLM revise-and-recheck loop. Adds unit and shellspec coverage.\n\n* test(quality): avoid a floating-point boundary in the mixed-voice test\n\nA 50/50 register split puts the relative spread exactly on the 1.0 warning\nthreshold, which rounded to a notice on macOS and a warning on Linux. Use an\nuneven 5/3 split so the spread lands at ~1.29, well clear of the boundary, so\nthe test is deterministic across platforms.\n\n* docs(quality): add doc comments to quality helpers and tests\n\nDocument the per-check helpers, the doctor command entry points, and every\nnew test function so their intent is clear from the declaration, addressing\nCodeRabbit's docstring-coverage check.\n\n* feat(quality): keep findings through show, print reliability on train, denoise segments\n\nAddress UX gaps found in real use:\n\n- train now prints the corpus reliability on stdout for everyone (a person, a\n  script, an LLM), not only at a terminal, matching train --help. A thin or mixed\n  corpus lists the fixes and points at doctor; a clean corpus prints one line.\n- The quality findings are stored in the profile at train time, so show --format\n  json reports what doctor found — including the per-document outlier and\n  short-file findings the stored distribution alone could not reproduce. show text\n  gains a one-line Reliability field, and show --format json --summary omits the\n  large term_preferences list for a lighter LLM-facing payload (default unchanged).\n- check --explain/--format json localizes drift to running-prose paragraphs only;\n  headings, bullet and table blocks, and blockquotes are no longer reported as\n  drifting paragraphs (the whole-document score still measures them).\n- The README is more than half shorter and leads with what omokage does and does\n  not do; the root help points at doctor.\n\nFindings are persisted as opaque JSON bytes so storage stays decoupled from the\nquality package (which imports profile). Adds unit and shellspec coverage for each\nbehavior. Regenerates demo.gif for the new train output.\n\n* docs(storage): document the quality-findings storage tests",
+          "timestamp": "2026-06-03T22:26:55+09:00",
+          "tree_id": "6f6bcfe71dc1b5293897446103748c2dde04e53a",
+          "url": "https://github.com/nao1215/omokage/commit/be58fe843d200389763f706b82539db5d163329f"
+        },
+        "date": 1780493265363,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 858083,
+            "unit": "ns/op\t  389241 B/op\t    3084 allocs/op",
+            "extra": "1923 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 858083,
+            "unit": "ns/op",
+            "extra": "1923 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 389241,
+            "unit": "B/op",
+            "extra": "1923 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 3084,
+            "unit": "allocs/op",
+            "extra": "1923 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 3867261,
+            "unit": "ns/op\t  102944 B/op\t      34 allocs/op",
+            "extra": "307 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 3867261,
+            "unit": "ns/op",
+            "extra": "307 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 102944,
+            "unit": "B/op",
+            "extra": "307 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 34,
+            "unit": "allocs/op",
+            "extra": "307 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 255202,
+            "unit": "ns/op\t   86042 B/op\t     864 allocs/op",
+            "extra": "4558 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 255202,
+            "unit": "ns/op",
+            "extra": "4558 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 86042,
+            "unit": "B/op",
+            "extra": "4558 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 864,
+            "unit": "allocs/op",
+            "extra": "4558 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 231815,
+            "unit": "ns/op\t   83026 B/op\t     762 allocs/op",
+            "extra": "4969 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 231815,
+            "unit": "ns/op",
+            "extra": "4969 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 83026,
+            "unit": "B/op",
+            "extra": "4969 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 762,
+            "unit": "allocs/op",
+            "extra": "4969 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 313707,
+            "unit": "ns/op\t  213221 B/op\t     921 allocs/op",
+            "extra": "3658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 313707,
+            "unit": "ns/op",
+            "extra": "3658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 213221,
+            "unit": "B/op",
+            "extra": "3658 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 921,
+            "unit": "allocs/op",
+            "extra": "3658 times\n4 procs"
           }
         ]
       }
