@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS profile (
   std_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
   mean_char_ngrams TEXT NOT NULL DEFAULT '{}',
   std_char_ngrams TEXT NOT NULL DEFAULT '{}',
-  sources TEXT NOT NULL DEFAULT '[]'
+  sources TEXT NOT NULL DEFAULT '[]',
+  quality_findings TEXT NOT NULL DEFAULT '[]'
 );
 
 -- Term preferences are profile-local: this database holds exactly one author's
@@ -81,15 +82,20 @@ CREATE TABLE IF NOT EXISTS term_variant (
   PRIMARY KEY (group_key, surface)
 );`
 
-// migrate brings an existing profile database up to the current schema. The
-// `sources` column was added after the original schema shipped, so a profile
-// trained by an older omokage lacks it. CREATE TABLE IF NOT EXISTS never alters
-// an existing table, so we add the column explicitly and ignore the
-// "duplicate column name" error a freshly created (already-current) table returns.
+// migrate brings an existing profile database up to the current schema. Columns
+// added after the original schema shipped (`sources`, then `quality_findings`)
+// are absent from a profile trained by an older omokage. CREATE TABLE IF NOT
+// EXISTS never alters an existing table, so each new column is added explicitly,
+// ignoring the "duplicate column name" error a freshly created (already-current)
+// table returns.
 func migrate(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx, `ALTER TABLE profile ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return err
+	for _, column := range []string{
+		`ALTER TABLE profile ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE profile ADD COLUMN quality_findings TEXT NOT NULL DEFAULT '[]'`,
+	} {
+		if _, err := db.ExecContext(ctx, column); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return err
+		}
 	}
 	return nil
 }

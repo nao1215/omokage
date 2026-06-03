@@ -38,8 +38,10 @@ demo: build ## Regenerate the README GIFs from doc/img/*.tape (needs vhs)
 	vhs doc/img/demo.tape && mv demo.gif doc/img/demo.gif
 	rm -rf $(DEMO_DIR) && mkdir -p $(DEMO_DIR) && cp -r examples $(DEMO_DIR)/examples
 	vhs doc/img/explain.tape && mv explain.gif doc/img/explain.gif
+	rm -rf $(DEMO_DIR) && mkdir -p $(DEMO_DIR) && cp -r examples $(DEMO_DIR)/examples
+	vhs doc/img/doctor.tape && mv doctor.gif doc/img/doctor.gif
 	rm -rf $(DEMO_DIR) $(DEMO_BIN)
-	@echo 'Wrote doc/img/demo.gif and doc/img/explain.gif'
+	@echo 'Wrote doc/img/demo.gif, doc/img/explain.gif, and doc/img/doctor.gif'
 
 lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml

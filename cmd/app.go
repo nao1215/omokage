@@ -18,6 +18,7 @@ import (
 	"github.com/nao1215/omokage/internal/feature"
 	"github.com/nao1215/omokage/internal/profile"
 	"github.com/nao1215/omokage/internal/project"
+	"github.com/nao1215/omokage/internal/quality"
 	"github.com/nao1215/omokage/internal/storage"
 	"github.com/nao1215/omokage/internal/term"
 )
@@ -110,6 +111,8 @@ func (a *App) Run(args []string) int {
 		return a.runTrain(args[1:])
 	case "check":
 		return a.runCheck(args[1:])
+	case "doctor":
+		return a.runDoctor(args[1:])
 	case "diff":
 		return a.runDiff(args[1:])
 	case "list":
@@ -142,7 +145,7 @@ func (a *App) runHelp(args []string) int {
 	name := args[0]
 	rest := args[1:]
 	switch name {
-	case "init", "train", "check", "diff", "list", "show", "remove", "rename":
+	case "init", "train", "check", "doctor", "diff", "list", "show", "remove", "rename":
 		forwarded := make([]string, 0, len(args)+1)
 		forwarded = append(forwarded, args...)
 		forwarded = append(forwarded, "--help")
@@ -191,6 +194,26 @@ func (a *App) resolveScope(sf scopeFlags) (project.Scope, error) {
 		ConfigPath: strings.TrimSpace(*sf.configPath),
 		ProfileDir: strings.TrimSpace(*sf.profileDir),
 	})
+}
+
+// featuresOrDefault resolves the feature weights for a command that needs only
+// the configuration, not a profile (diff and doctor). An active store supplies
+// its features; the absence of a store — no local project, or --global with none
+// created — falls back to the built-in defaults rather than erroring, so the
+// command keeps working anywhere. A store that exists but is broken (a malformed
+// --config) is reported, and ok is false so the caller stops. This is the lenient
+// resolution diff and doctor share, kept in one place.
+func (a *App) featuresOrDefault(sf scopeFlags) (features config.Features, ok bool) {
+	cfg := config.Default(filepath.Base(a.workDir))
+	scope, err := a.resolveScope(sf)
+	if err == nil {
+		return scope.Config.Features, true
+	}
+	if errors.Is(err, project.ErrProjectNotFound) || errors.Is(err, project.ErrStoreNotFound) {
+		return cfg.Features, true
+	}
+	writeLine(a.stderr, err)
+	return config.Features{}, false
 }
 
 // writeScopeError prints a resolve error, expanding the bare "project not found"
@@ -306,9 +329,12 @@ func (a *App) runTrain(args []string) int {
 	makeDefault := flagSet.Bool("default", false, "set this author as the store's default (used by check/show when --author is omitted)")
 	scopeF := registerScopeFlags(flagSet)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Learn an author's style from .md and .txt files.\n")
+		writef(a.stderr, "Learn an author's style from .md and .txt files and save it as a profile.\n")
 		writef(a.stderr, "INPUT is one or more directories and/or .md/.txt files (mixed freely);\n")
 		writef(a.stderr, "directories are scanned for .md and .txt, files are taken as given.\n")
+		writef(a.stderr, "AUTHOR is just a profile name: a person, a persona, or a purpose (blog, docs).\n")
+		writef(a.stderr, "After training, it prints the corpus reliability (good/fair/weak); when the corpus\n")
+		writef(a.stderr, "is thin or mixed it lists what to fix and points to 'omokage doctor'.\n")
 		writef(a.stderr, "Usage: omokage train --author AUTHOR [--default] INPUT...\n")
 		printFlagDefaults(a.stderr, flagSet)
 	}
@@ -342,12 +368,12 @@ func (a *App) runTrain(args []string) int {
 		return 1
 	}
 
-	distribution, err := feature.ExtractCorpus(files)
+	distribution, docs, err := feature.ExtractCorpusDocuments(files)
 	if err != nil {
 		writeLine(a.stderr, err)
 		return 1
 	}
-	// CollectFiles found supported files, but ExtractCorpus drops empty or
+	// CollectFiles found supported files, but ExtractCorpusDocuments drops empty or
 	// whitespace-only documents. If nothing usable is left, a saved profile would
 	// be all zeros and every later check would score against noise, so refuse.
 	if distribution.DocumentCount == 0 {
@@ -385,6 +411,15 @@ func (a *App) runTrain(args []string) int {
 		writef(a.stderr, "warning: the profile was trained, but saving term preferences failed: %v\n", err)
 	}
 
+	// Assess the corpus behind the profile and store the findings in the same
+	// database, so `show` can report later what training found — including the
+	// per-document findings (short files, outliers) the stored distribution alone
+	// cannot reproduce. A store failure is reported but does not undo the profile.
+	report := quality.AssessCorpus(distribution, a.qualityDocuments(docs), scope.Config.Features)
+	if err := storage.SaveQualityFindings(profilePath, marshalQualityFindings(report.Findings)); err != nil {
+		writef(a.stderr, "warning: the profile was trained, but storing its quality findings failed: %v\n", err)
+	}
+
 	writef(a.stdout, "Trained author %q from %d files.\n", record.Author, record.FileCount)
 	writef(a.stdout, "Profile: %s\n", profilePath)
 
@@ -401,6 +436,12 @@ func (a *App) runTrain(args []string) int {
 		}
 		writef(a.stdout, "Default author set to %q.\n", *author)
 	}
+
+	// Print the corpus-reliability summary on stdout (not gated behind a terminal),
+	// so a person, a script, or an LLM all see whether to curate the corpus or move
+	// on. It is one line when the corpus looks fine, and adds the findings and a
+	// pointer to `doctor` when it does not — matching what `train --help` promises.
+	renderTrainQualitySummary(a.stdout, report, flagSet.Args())
 	return 0
 }
 
@@ -413,7 +454,14 @@ func (a *App) runCheck(args []string) int {
 	scopeF := registerScopeFlags(flagSet)
 	flagSet.Usage = func() {
 		writef(a.stderr, "Score how closely FILE matches AUTHOR's trained style, from 0 to 100.\n")
+		writef(a.stderr, "AUTHOR is optional with one profile or a default_author; it is a profile name,\n")
+		writef(a.stderr, "not necessarily a person.\n")
 		writef(a.stderr, "Usage: omokage check [--author AUTHOR] [--explain] [--format text|json] [--score-only] FILE\n")
+		writef(a.stderr, "\nOutput modes (pick at most one):\n")
+		writef(a.stderr, "  (default)      similarity score and the top few differences\n")
+		writef(a.stderr, "  --score-only   just the integer 0-100, for scripts\n")
+		writef(a.stderr, "  --explain      prioritized per-feature drift and the paragraphs that drift most\n")
+		writef(a.stderr, "  --format json  the --explain detail plus term-notation warnings, for an LLM\n")
 		printFlagDefaults(a.stderr, flagSet)
 	}
 	if code, ok := parseArgs(flagSet, args); !ok {
@@ -567,11 +615,8 @@ func (a *App) runDiff(args []string) int {
 	// the defaults rather than erroring. That keeps `diff --global a b` working for
 	// wrappers and habits that always pass --global, matching plain `diff a b`. A
 	// store that exists but is broken (a malformed --config) is still surfaced.
-	cfg := config.Default(filepath.Base(a.workDir))
-	if scope, err := a.resolveScope(scopeF); err == nil {
-		cfg = scope.Config
-	} else if !errors.Is(err, project.ErrProjectNotFound) && !errors.Is(err, project.ErrStoreNotFound) {
-		writeLine(a.stderr, err)
+	features, ok := a.featuresOrDefault(scopeF)
+	if !ok {
 		return 1
 	}
 
@@ -600,7 +645,7 @@ func (a *App) runDiff(args []string) int {
 	renderComparison(a.stdout, renderOptions{
 		leftPath:    flagSet.Arg(0),
 		rightPath:   flagSet.Arg(1),
-		comparison:  profile.Compare(leftMetrics, rightMetrics, cfg.Features),
+		comparison:  profile.Compare(leftMetrics, rightMetrics, features),
 		showSources: true,
 	})
 	return 0
@@ -679,10 +724,13 @@ func (a *App) runShow(args []string) int {
 	flagSet := newFlagSet("show", a.stderr)
 	author := flagSet.String("author", "", "author profile to show (optional: defaults to default_author or the only trained profile)")
 	format := flagSet.String("format", formatText, "output format: text or json")
+	summary := flagSet.Bool("summary", false, "with --format json, omit the term_preferences list for a lighter payload (provenance and quality only)")
 	scopeF := registerScopeFlags(flagSet)
 	flagSet.Usage = func() {
-		writef(a.stderr, "Show how an author profile was trained: when, from how many files, and from where.\n")
-		writef(a.stderr, "Usage: omokage show [--author AUTHOR] [--format text|json]\n")
+		writef(a.stderr, "Show how an author profile was trained, and how reliable comparisons against it are.\n")
+		writef(a.stderr, "--format json adds the corpus reliability, the quality findings, and term preferences;\n")
+		writef(a.stderr, "add --summary to drop term_preferences for a lighter JSON to hand an LLM.\n")
+		writef(a.stderr, "Usage: omokage show [--author AUTHOR] [--format text|json] [--summary]\n")
 		printFlagDefaults(a.stderr, flagSet)
 	}
 	if code, ok := parseArgs(flagSet, args); !ok {
@@ -719,17 +767,13 @@ func (a *App) runShow(args []string) int {
 		return 1
 	}
 
+	// The quality findings recorded at train time are the source of truth for
+	// `show`, so a re-trained profile's outliers and short files survive (the stored
+	// distribution alone cannot reproduce them). A profile trained before findings
+	// were stored falls back to the aggregate-only assessment.
+	findings, reliability := a.qualityForShow(profilePath, record.Distribution, scope.Config.Features)
+
 	if *format == formatJSON {
-		// Term preferences are reported only in the JSON form (the text form stays a
-		// short provenance summary, not a term dump). They are auxiliary to the
-		// profile summary, so a load failure is reported on stderr but does not fail
-		// the command or corrupt the JSON on stdout: the summary is still emitted with
-		// an empty term list.
-		terms, err := storage.LoadTerms(profilePath)
-		if err != nil {
-			writef(a.stderr, "warning: could not load term preferences: %v\n", err)
-			terms = term.Profile{}
-		}
 		payload := profileSummaryJSON{
 			Author:          record.Author,
 			TrainedAt:       record.TrainedAt.Format(time.RFC3339),
@@ -740,7 +784,20 @@ func (a *App) runShow(args []string) int {
 			SentenceCount:   record.Distribution.SentenceCount,
 			CharacterCount:  record.Distribution.CharacterCount,
 			Default:         record.Author == strings.TrimSpace(scope.Config.Defaults.Author),
-			TermPreferences: toTermPreferenceJSON(terms),
+			Reliability:     reliability,
+			QualityFindings: findings,
+		}
+		// --summary drops term_preferences (the largest part of the payload) for a
+		// lighter JSON to hand an LLM that only needs provenance and quality. Without
+		// it, term_preferences is always present, so the default shape stays stable.
+		if !*summary {
+			terms, err := storage.LoadTerms(profilePath)
+			if err != nil {
+				writef(a.stderr, "warning: could not load term preferences: %v\n", err)
+				terms = term.Profile{}
+			}
+			preferences := toTermPreferenceJSON(terms)
+			payload.TermPreferences = &preferences
 		}
 		encoder := json.NewEncoder(a.stdout)
 		encoder.SetIndent("", "  ")
@@ -778,7 +835,27 @@ func (a *App) runShow(args []string) int {
 	writef(a.stdout, "Documents: %d\n", record.Distribution.DocumentCount)
 	writef(a.stdout, "Sentences: %d\n", record.Distribution.SentenceCount)
 	writef(a.stdout, "Characters: %d\n", record.Distribution.CharacterCount)
+	// A one-word reliability line keeps the text view short; --format json carries
+	// the findings behind the rating, and `doctor` re-checks a corpus live.
+	writef(a.stdout, "Reliability: %s\n", reliability)
 	return 0
+}
+
+// qualityForShow returns the corpus-quality findings and reliability rating that
+// `show` reports. It prefers the findings stored at train time (the source of
+// truth, including the per-document outlier and short-file findings the stored
+// distribution cannot reproduce); a profile trained before findings were stored,
+// or one whose stored findings cannot be read, falls back to the aggregate-only
+// assessment so the rating is never silently absent.
+func (a *App) qualityForShow(profilePath string, dist feature.Distribution, flags config.Features) ([]qualityFindingJSON, string) {
+	if data, err := storage.LoadQualityFindings(profilePath); err == nil {
+		var stored []qualityFindingJSON
+		if err := json.Unmarshal(data, &stored); err == nil && stored != nil {
+			return stored, reliabilityFromFindings(stored)
+		}
+	}
+	report := quality.AssessProfile(dist, flags)
+	return toQualityFindingJSON(report.Findings), report.Reliability()
 }
 
 func (a *App) runRemove(args []string) int {
@@ -948,23 +1025,41 @@ func (a *App) runRename(args []string) int {
 }
 
 func (a *App) printRootHelp() {
-	writeLine(a.stdout, "omokage analyzes writing style and compares it against learned author profiles.")
-	writeLine(a.stdout, "It works on Japanese and English text and keeps each profile in a local SQLite database.")
+	writeLine(a.stdout, "omokage compares writing style: it learns how an author writes, then scores how")
+	writeLine(a.stdout, "closely a draft matches that voice. It measures style (sentence shape, register,")
+	writeLine(a.stdout, "script balance, word and character patterns), not meaning, correctness, or quality.")
+	writeLine(a.stdout, "It works on Japanese and English text, runs locally, and never uses the network.")
 	writeLine(a.stdout)
 	writeLine(a.stdout, "Usage:")
 	writeLine(a.stdout, "  omokage <command> [arguments]")
 	writeLine(a.stdout)
+	writeLine(a.stdout, "Common path (train once, then check drafts):")
+	writeLine(a.stdout, "  omokage init")
+	writeLine(a.stdout, "  omokage train --author me ./posts")
+	writeLine(a.stdout, "  omokage check draft.md")
+	writeLine(a.stdout, "Unsure a corpus is good enough? 'omokage doctor ./posts' rates it, training nothing.")
+	writeLine(a.stdout)
 	writeLine(a.stdout, "Commands:")
 	writeLine(a.stdout, "  init     Create an omokage store here, or --global for a per-user one.")
 	writeLine(a.stdout, "  train    Learn an author's style from directories and/or .md and .txt files.")
+	writeLine(a.stdout, "  doctor   Check whether a corpus is solid enough to train, without training it.")
 	writeLine(a.stdout, "  check    Score how closely a file matches a trained author (--explain for details).")
 	writeLine(a.stdout, "  diff     Compare two files directly, without a trained profile.")
 	writeLine(a.stdout, "  list     List the author profiles in the store (--long for details).")
-	writeLine(a.stdout, "  show     Show how an author profile was trained.")
+	writeLine(a.stdout, "  show     Show how an author profile was trained (--format json for details).")
 	writeLine(a.stdout, "  rename   Rename an author profile.")
 	writeLine(a.stdout, "  remove   Remove an author profile.")
 	writeLine(a.stdout, "  version  Print the omokage version.")
 	writeLine(a.stdout, "  help     Show this help, or 'omokage help <command>' for one command.")
+	writeLine(a.stdout)
+	writeLine(a.stdout, "AUTHOR is just a profile name. It can be a person, a persona, or a purpose")
+	writeLine(a.stdout, `(e.g. --author blog, --author docs); train one profile per voice you want to match.`)
+	writeLine(a.stdout)
+	writeLine(a.stdout, "check output modes:")
+	writeLine(a.stdout, "  (default)       similarity score plus the top few differences")
+	writeLine(a.stdout, "  --score-only    just the integer 0-100, for shell pipelines")
+	writeLine(a.stdout, "  --explain       prioritized per-feature drift and the paragraphs that drift most")
+	writeLine(a.stdout, "  --format json   the same detail as --explain, for an LLM or a tool to read")
 	writeLine(a.stdout)
 	writeLine(a.stdout, `omokage uses a local project (omokage.toml found by walking up from the current`)
 	writeLine(a.stdout, `directory) when one exists, otherwise the global store at $OMOKAGE_HOME, or your`)
@@ -989,9 +1084,21 @@ type profileSummaryJSON struct {
 	SentenceCount  int      `json:"sentence_count"`
 	CharacterCount int      `json:"character_count"`
 	Default        bool     `json:"default"`
-	// TermPreferences is the profile's learned notation preferences. It is always
-	// present (an empty array when none were extracted) so the shape is stable.
-	TermPreferences []termPreferenceJSON `json:"term_preferences"`
+	// Reliability summarizes how dependable comparisons against this profile are,
+	// from the corpus it was trained on: "good", "fair", or "weak". It reflects
+	// sample size and consistency, not the quality of the writing.
+	Reliability string `json:"reliability"`
+	// QualityFindings are the corpus-quality findings recorded when the profile was
+	// trained — the same ones `doctor` reported, including the per-document findings
+	// (short files, outliers) the stored distribution alone cannot reproduce. It is
+	// always present (empty array when the corpus looked clean) so the shape is
+	// stable.
+	QualityFindings []qualityFindingJSON `json:"quality_findings"`
+	// TermPreferences is the profile's learned notation preferences. It is a pointer
+	// so --summary can omit it entirely for a lighter payload: a nil pointer drops
+	// the key, while the default output keeps it present (an empty array when none
+	// were extracted) so the non-summary shape stays stable.
+	TermPreferences *[]termPreferenceJSON `json:"term_preferences,omitempty"`
 }
 
 // termPreferenceJSON is one same-concept group in `show --format json`.
