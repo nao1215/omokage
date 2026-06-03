@@ -17,6 +17,7 @@ func minimalRecord() profile.Record {
 	}
 }
 
+// TestSaveLoadQualityFindingsRoundTrip verifies stored findings read back byte-for-byte.
 func TestSaveLoadQualityFindingsRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +39,7 @@ func TestSaveLoadQualityFindingsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestLoadQualityFindingsDefaultsToEmpty verifies a profile without stored findings loads the empty default.
 func TestLoadQualityFindingsDefaultsToEmpty(t *testing.T) {
 	t.Parallel()
 
@@ -56,6 +58,7 @@ func TestLoadQualityFindingsDefaultsToEmpty(t *testing.T) {
 	}
 }
 
+// TestLoadQualityFindingsMissingProfile verifies a missing database yields the empty default, not an error.
 func TestLoadQualityFindingsMissingProfile(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +72,7 @@ func TestLoadQualityFindingsMissingProfile(t *testing.T) {
 	}
 }
 
+// TestSaveQualityFindingsWithoutProfileFails verifies attaching findings before the profile row exists is reported.
 func TestSaveQualityFindingsWithoutProfileFails(t *testing.T) {
 	t.Parallel()
 
