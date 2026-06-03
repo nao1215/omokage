@@ -8,6 +8,7 @@ import (
 	"github.com/nao1215/omokage/internal/feature"
 )
 
+// TestDocumentDivergenceZeroForCorpusCenter verifies a document at the corpus mean does not diverge.
 func TestDocumentDivergenceZeroForCorpusCenter(t *testing.T) {
 	t.Parallel()
 
@@ -21,6 +22,7 @@ func TestDocumentDivergenceZeroForCorpusCenter(t *testing.T) {
 	}
 }
 
+// TestDocumentDivergenceRisesWithDistance verifies a document far from the corpus diverges more than one at its center.
 func TestDocumentDivergenceRisesWithDistance(t *testing.T) {
 	t.Parallel()
 
@@ -40,6 +42,7 @@ func TestDocumentDivergenceRisesWithDistance(t *testing.T) {
 	}
 }
 
+// TestDocumentDivergenceIgnoresFingerprint verifies a fingerprint-only difference does not register as divergence.
 func TestDocumentDivergenceIgnoresFingerprint(t *testing.T) {
 	t.Parallel()
 
@@ -56,6 +59,7 @@ func TestDocumentDivergenceIgnoresFingerprint(t *testing.T) {
 	}
 }
 
+// TestLeaveOneOutFlagsTheOddDocument verifies the odd document stands far out while the steady ones sit low.
 func TestLeaveOneOutFlagsTheOddDocument(t *testing.T) {
 	t.Parallel()
 
@@ -99,6 +103,7 @@ func TestLeaveOneOutFlagsTheOddDocument(t *testing.T) {
 	}
 }
 
+// TestLeaveOneOutUniformCorpusHasNoOutliers verifies a uniform corpus produces no divergence.
 func TestLeaveOneOutUniformCorpusHasNoOutliers(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +124,7 @@ func TestLeaveOneOutUniformCorpusHasNoOutliers(t *testing.T) {
 	}
 }
 
+// TestLeaveOneOutTooFewDocuments verifies a single document has nothing to diverge from.
 func TestLeaveOneOutTooFewDocuments(t *testing.T) {
 	t.Parallel()
 
@@ -130,6 +136,7 @@ func TestLeaveOneOutTooFewDocuments(t *testing.T) {
 	}
 }
 
+// TestHighLevelSpreadsRanksWidestFirstAndSkipsVariance verifies spreads lead with the widest feature and exclude variance features.
 func TestHighLevelSpreadsRanksWidestFirstAndSkipsVariance(t *testing.T) {
 	t.Parallel()
 
@@ -164,6 +171,7 @@ func TestHighLevelSpreadsRanksWidestFirstAndSkipsVariance(t *testing.T) {
 	}
 }
 
+// TestHighLevelSpreadsSkipsAbsentFeatures verifies a near-absent feature is not reported.
 func TestHighLevelSpreadsSkipsAbsentFeatures(t *testing.T) {
 	t.Parallel()
 

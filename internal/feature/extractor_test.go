@@ -230,6 +230,7 @@ func TestExtractCorpusMissingFile(t *testing.T) {
 	}
 }
 
+// TestExtractCorpusDocumentsReturnsPerDocument verifies the per-document view drops empty files in step with the aggregate.
 func TestExtractCorpusDocumentsReturnsPerDocument(t *testing.T) {
 	t.Parallel()
 
@@ -265,6 +266,7 @@ func TestExtractCorpusDocumentsReturnsPerDocument(t *testing.T) {
 	}
 }
 
+// TestExtractCorpusDocumentsMissingFile verifies a missing file is reported as an error.
 func TestExtractCorpusDocumentsMissingFile(t *testing.T) {
 	t.Parallel()
 

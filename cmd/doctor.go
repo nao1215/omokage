@@ -43,6 +43,10 @@ func displayPath(baseDir, path string) string {
 	return rel
 }
 
+// runDoctor implements `omokage doctor INPUT...`: it extracts the corpus, assesses
+// its quality, and prints the report as text or JSON. It trains and writes
+// nothing, and needs no store (falling back to the default feature weights, like
+// diff).
 func (a *App) runDoctor(args []string) int {
 	flagSet := newFlagSet("doctor", a.stderr)
 	format := flagSet.String("format", formatText, "output format: text or json")
@@ -178,6 +182,8 @@ type qualityFindingJSON struct {
 	Action   string `json:"action"`
 }
 
+// renderDoctorJSON emits the corpus report as one machine-readable JSON object
+// for a tool or an LLM to consume.
 func renderDoctorJSON(w io.Writer, report quality.Report) error {
 	payload := doctorJSON{
 		DocumentCount:             report.DocumentCount,

@@ -45,10 +45,12 @@ func corpus(t *testing.T, metrics ...feature.Metrics) (feature.Distribution, []D
 	return feature.Aggregate(metrics), docs
 }
 
+// namef builds a deterministic document name for a synthetic corpus.
 func namef(i int) string {
 	return fmt.Sprintf("doc%d.md", i)
 }
 
+// findingByCode returns the report's finding with the given code, if any.
 func findingByCode(report Report, code string) (Finding, bool) {
 	for _, f := range report.Findings {
 		if f.Code == code {
@@ -58,10 +60,12 @@ func findingByCode(report Report, code string) (Finding, bool) {
 	return Finding{}, false
 }
 
+// defaultFeatures returns the built-in feature weights used by the quality tests.
 func defaultFeatures() config.Features {
 	return config.Default("test").Features
 }
 
+// TestCleanCorpusHasNoFindings verifies a corpus with enough consistent material raises no findings and rates good.
 func TestCleanCorpusHasNoFindings(t *testing.T) {
 	t.Parallel()
 
@@ -83,6 +87,7 @@ func TestCleanCorpusHasNoFindings(t *testing.T) {
 	}
 }
 
+// TestFewDocumentsWarnsBelowUsable verifies a one- or two-document corpus warns and rates weak.
 func TestFewDocumentsWarnsBelowUsable(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +109,7 @@ func TestFewDocumentsWarnsBelowUsable(t *testing.T) {
 	}
 }
 
+// TestFewDocumentsNoticesBelowReliable verifies a small-but-usable corpus notices and rates fair.
 func TestFewDocumentsNoticesBelowReliable(t *testing.T) {
 	t.Parallel()
 
@@ -126,6 +132,7 @@ func TestFewDocumentsNoticesBelowReliable(t *testing.T) {
 	}
 }
 
+// TestShortDocumentsWarnWhenMostAreShort verifies an all-short corpus warns and names the short files.
 func TestShortDocumentsWarnWhenMostAreShort(t *testing.T) {
 	t.Parallel()
 
@@ -156,6 +163,7 @@ func TestShortDocumentsWarnWhenMostAreShort(t *testing.T) {
 	}
 }
 
+// TestMixedVoiceFlagsAnInterpretableFeature verifies a register-split corpus warns and names a register feature.
 func TestMixedVoiceFlagsAnInterpretableFeature(t *testing.T) {
 	t.Parallel()
 
@@ -183,6 +191,7 @@ func TestMixedVoiceFlagsAnInterpretableFeature(t *testing.T) {
 	}
 }
 
+// TestOutlierDocumentIsNamed verifies the odd document in a larger corpus is named as an outlier.
 func TestOutlierDocumentIsNamed(t *testing.T) {
 	t.Parallel()
 
@@ -210,6 +219,7 @@ func TestOutlierDocumentIsNamed(t *testing.T) {
 	}
 }
 
+// TestOutlierDetectedOnSmallCorpus verifies leave-one-out catches an outlier even on a small corpus.
 func TestOutlierDetectedOnSmallCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -231,6 +241,7 @@ func TestOutlierDetectedOnSmallCorpus(t *testing.T) {
 	}
 }
 
+// TestNoOutlierOnConsistentCorpus verifies a consistent corpus invents no outliers.
 func TestNoOutlierOnConsistentCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -246,6 +257,7 @@ func TestNoOutlierOnConsistentCorpus(t *testing.T) {
 	}
 }
 
+// TestAssessProfileShortAverageAlignsWithDoctor verifies the profile-only rating warns (weak) like doctor on a very-short-average corpus.
 func TestAssessProfileShortAverageAlignsWithDoctor(t *testing.T) {
 	t.Parallel()
 
@@ -276,6 +288,7 @@ func TestAssessProfileShortAverageAlignsWithDoctor(t *testing.T) {
 	}
 }
 
+// TestAssessProfileModerateAverageIsAdvisory verifies a merely below-average corpus is an advisory notice.
 func TestAssessProfileModerateAverageIsAdvisory(t *testing.T) {
 	t.Parallel()
 
@@ -298,6 +311,7 @@ func TestAssessProfileModerateAverageIsAdvisory(t *testing.T) {
 	}
 }
 
+// TestReliabilityWeakBeatsFair verifies any warning makes the whole report weak.
 func TestReliabilityWeakBeatsFair(t *testing.T) {
 	t.Parallel()
 

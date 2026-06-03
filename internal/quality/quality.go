@@ -168,6 +168,8 @@ func AssessProfile(dist feature.Distribution, flags config.Features) Report {
 	return report
 }
 
+// baseReport fills in the size fields shared by every assessment (counts and the
+// average document length), leaving Findings for the checks to append.
 func baseReport(dist feature.Distribution) Report {
 	average := 0
 	if dist.DocumentCount > 0 {
@@ -181,12 +183,17 @@ func baseReport(dist feature.Distribution) Report {
 	}
 }
 
+// appendFinding adds a check's result to the report, ignoring the nil a check
+// returns when it has nothing to report.
 func appendFinding(report *Report, finding *Finding) {
 	if finding != nil {
 		report.Findings = append(report.Findings, *finding)
 	}
 }
 
+// checkDocumentCount flags a corpus that is too small for the spread to be a
+// trustworthy estimate: a warning below minUsableDocuments, a notice below
+// minReliableDocuments, nothing above.
 func checkDocumentCount(n int) *Finding {
 	switch {
 	case n <= 0:
@@ -210,6 +217,10 @@ func checkDocumentCount(n int) *Finding {
 	}
 }
 
+// checkShortDocuments flags documents too short to measure stable per-document
+// features, naming them. It warns when short documents are at least half the
+// corpus (the shortness is a property of the corpus, not a few stragglers) and
+// notices otherwise.
 func checkShortDocuments(docs []Document) *Finding {
 	short := make([]string, 0, len(docs))
 	for _, doc := range docs {
@@ -233,6 +244,9 @@ func checkShortDocuments(docs []Document) *Finding {
 	}
 }
 
+// checkAverageLength is the short-document check for a stored profile, which
+// keeps only the aggregate. It stands in for checkShortDocuments when the
+// per-document lengths are gone, judging by the corpus average instead.
 func checkAverageLength(dist feature.Distribution) *Finding {
 	if dist.DocumentCount == 0 {
 		return nil
@@ -258,6 +272,10 @@ func checkAverageLength(dist feature.Distribution) *Finding {
 	}
 }
 
+// checkMixedVoice flags a corpus whose interpretable features swing widely enough
+// to suggest it mixes different kinds of writing, naming the feature it disagrees
+// on most. A feature that varies as much as its own mean (strongSpreadRatio)
+// promotes the notice to a warning.
 func checkMixedVoice(dist feature.Distribution, flags config.Features) *Finding {
 	// Spread is only meaningful once a few documents back it; with one or two the
 	// document-count finding already carries the message.
@@ -302,6 +320,10 @@ func checkMixedVoice(dist feature.Distribution, flags config.Features) *Finding 
 	}
 }
 
+// checkOutliers flags documents that read differently from the rest of the
+// corpus, naming them with how far out they sit. It measures each document
+// leave-one-out (against the others) so a lone outlier does not mask itself by
+// widening the spread it is judged against.
 func checkOutliers(docs []Document, flags config.Features) *Finding {
 	if len(docs) < minDocsForOutliers {
 		return nil

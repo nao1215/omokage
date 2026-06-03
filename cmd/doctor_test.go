@@ -42,6 +42,7 @@ func richCorpus(t *testing.T, dir string, n int) {
 	}
 }
 
+// TestDoctorReportsThinCorpus verifies doctor rates a thin corpus weak, lists findings, and writes no store.
 func TestDoctorReportsThinCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -64,6 +65,7 @@ func TestDoctorReportsThinCorpus(t *testing.T) {
 	}
 }
 
+// TestDoctorCleanCorpusReportsGood verifies doctor rates a solid corpus good.
 func TestDoctorCleanCorpusReportsGood(t *testing.T) {
 	t.Parallel()
 
@@ -83,6 +85,7 @@ func TestDoctorCleanCorpusReportsGood(t *testing.T) {
 	}
 }
 
+// TestDoctorJSON verifies doctor --format json emits valid, complete findings.
 func TestDoctorJSON(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +125,7 @@ func TestDoctorJSON(t *testing.T) {
 	}
 }
 
+// TestDoctorRejectsUnknownFormat verifies an unknown --format fails.
 func TestDoctorRejectsUnknownFormat(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +141,7 @@ func TestDoctorRejectsUnknownFormat(t *testing.T) {
 	}
 }
 
+// TestDoctorRequiresInput verifies doctor with no input fails with a clear message.
 func TestDoctorRequiresInput(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +154,7 @@ func TestDoctorRequiresInput(t *testing.T) {
 	}
 }
 
+// TestDoctorRejectsURL verifies a URL input is rejected like train.
 func TestDoctorRejectsURL(t *testing.T) {
 	t.Parallel()
 
@@ -161,6 +167,7 @@ func TestDoctorRejectsURL(t *testing.T) {
 	}
 }
 
+// TestTrainNoteSuppressedInCapture verifies the post-training note is absent from captured output.
 func TestTrainNoteSuppressedInCapture(t *testing.T) {
 	t.Parallel()
 
@@ -186,6 +193,7 @@ func TestTrainNoteSuppressedInCapture(t *testing.T) {
 	}
 }
 
+// TestRenderQualityNotesContent verifies the note renderer's content and that a clean report renders nothing.
 func TestRenderQualityNotesContent(t *testing.T) {
 	t.Parallel()
 
@@ -224,6 +232,7 @@ func TestRenderQualityNotesContent(t *testing.T) {
 	}
 }
 
+// TestShowJSONReportsReliability verifies show --format json carries a reliability rating and quality findings.
 func TestShowJSONReportsReliability(t *testing.T) {
 	t.Parallel()
 
