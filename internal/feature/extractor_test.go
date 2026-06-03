@@ -361,6 +361,72 @@ func TestExtractSegmentsIgnoresFencedBlockWithBlankLine(t *testing.T) {
 	}
 }
 
+// TestExtractSegmentsDropsNonProseParagraphs verifies headings, bullet lists, and
+// tables are not localized as drifting paragraphs.
+func TestExtractSegmentsDropsNonProseParagraphs(t *testing.T) {
+	t.Parallel()
+
+	doc := "# 見出しだけの段落\n\n" +
+		"- 箇条書き一\n- 箇条書き二\n- 箇条書き三\n\n" +
+		"| 列A | 列B |\n| --- | --- |\n| 値1 | 値2 |\n\n" +
+		"本日は降雨である。外出を実施した。混雑は著しいものであった。"
+
+	segments := ExtractSegments(doc)
+	if len(segments) != 1 {
+		t.Fatalf("expected only the prose paragraph to survive, got %d: %+v", len(segments), segments)
+	}
+	if !contains(segments[0].Text, "本日は降雨") {
+		t.Fatalf("the surviving segment should be the prose paragraph, got %q", segments[0].Text)
+	}
+	if segments[0].Index != 1 {
+		t.Fatalf("the surviving prose paragraph should be densely indexed #1, got %d", segments[0].Index)
+	}
+}
+
+// TestExtractSegmentsKeepsProseAmongStructure verifies prose paragraphs survive
+// (densely indexed) while a heading between them is dropped.
+func TestExtractSegmentsKeepsProseAmongStructure(t *testing.T) {
+	t.Parallel()
+
+	doc := "最初の段落です。静かな朝でした。\n\n" +
+		"## 区切りの見出し\n\n" +
+		"次の段落です。穏やかな午後でした。"
+
+	segments := ExtractSegments(doc)
+	if len(segments) != 2 {
+		t.Fatalf("expected 2 prose segments, got %d: %+v", len(segments), segments)
+	}
+	if segments[0].Index != 1 || segments[1].Index != 2 {
+		t.Fatalf("expected dense 1-based indexes, got %d and %d", segments[0].Index, segments[1].Index)
+	}
+}
+
+// TestLooksLikeProse verifies the prose/layout classifier across headings,
+// bullets, tables, blockquotes, labels, and real prose.
+func TestLooksLikeProse(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{"prose", "本日は晴天なり。散歩に行きました。", true},
+		{"english prose", "This is a normal sentence. It has periods.", true},
+		{"heading only", "# Introduction", false},
+		{"bullets only", "- one\n- two\n- three", false},
+		{"table only", "| a | b |\n| - | - |\n| 1 | 2 |", false},
+		{"blockquote only", "> quoted line\n> more quoting", false},
+		{"label without terminator", "概要", false},
+		{"mixed but mostly prose", "# 見出し\n本文の段落です。続きの文。さらに続く。", true},
+	}
+	for _, tc := range cases {
+		if got := looksLikeProse(tc.text); got != tc.want {
+			t.Fatalf("%s: looksLikeProse(%q) = %v, want %v", tc.name, tc.text, got, tc.want)
+		}
+	}
+}
+
 // TestExtractSegmentsIgnoresHTMLOnlyParagraph checks that a paragraph made only
 // of HTML produces no segment (it has no prose to localize).
 func TestExtractSegmentsIgnoresHTMLOnlyParagraph(t *testing.T) {

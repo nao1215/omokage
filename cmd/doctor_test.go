@@ -167,14 +167,12 @@ func TestDoctorRejectsURL(t *testing.T) {
 	}
 }
 
-// TestTrainNoteSuppressedInCapture verifies the post-training note is absent from captured output.
-func TestTrainNoteSuppressedInCapture(t *testing.T) {
+// TestTrainPrintsReliabilityOnStdout verifies the post-training summary reports a
+// thin corpus weak on stdout (not gated behind a terminal) with a pointer to
+// doctor, while the trained-profile confirmation stays present.
+func TestTrainPrintsReliabilityOnStdout(t *testing.T) {
 	t.Parallel()
 
-	// The post-training quality note is shown only at an interactive console, never
-	// into a capture — same contract as the check tip — so a thin corpus trains with
-	// clean output on both streams here (the test injects buffers, not a terminal).
-	// Automation reads the assessment from `doctor` or `show --format json` instead.
 	workDir := t.TempDir()
 	thinCorpus(t, filepath.Join(workDir, "posts"))
 	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
@@ -188,18 +186,42 @@ func TestTrainNoteSuppressedInCapture(t *testing.T) {
 	if !strings.Contains(stdout, `Trained author "me"`) {
 		t.Fatalf("train confirmation missing from stdout: %q", stdout)
 	}
-	if strings.Contains(stdout, "reliability") || strings.Contains(stderr, "reliability") {
-		t.Fatalf("captured train output must carry no quality note: stdout=%q stderr=%q", stdout, stderr)
+	// The reliability summary is on stdout so a person, a script, and an LLM all see
+	// it — matching what train --help promises.
+	if !strings.Contains(stdout, "Corpus reliability: weak") {
+		t.Fatalf("train should print the corpus reliability on stdout: %q", stdout)
+	}
+	if !strings.Contains(stdout, "omokage doctor") {
+		t.Fatalf("a weak corpus should point at doctor: %q", stdout)
 	}
 }
 
-// TestRenderQualityNotesContent verifies the note renderer's content and that a clean report renders nothing.
-func TestRenderQualityNotesContent(t *testing.T) {
+// TestTrainCleanCorpusReportsGood verifies a solid corpus trains with a single
+// good reliability line and no findings or doctor pointer.
+func TestTrainCleanCorpusReportsGood(t *testing.T) {
 	t.Parallel()
 
-	// The note renderer is exercised directly (the terminal gate lives in the
-	// command) so its content is verified without depending on a tty: a thin corpus
-	// produces a reliability headline, an actionable line, and a pointer to doctor.
+	workDir := t.TempDir()
+	richCorpus(t, filepath.Join(workDir, "posts"), 8)
+	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
+		t.Fatalf("init failed: %s", stderr)
+	}
+
+	_, stdout, _ := runApp(t, workDir, "train", "--author", "me", "posts")
+	if !strings.Contains(stdout, "Corpus reliability: good.") {
+		t.Fatalf("a clean corpus should report good reliability: %q", stdout)
+	}
+	if strings.Contains(stdout, "omokage doctor") || strings.Contains(stdout, "→") {
+		t.Fatalf("a clean corpus should not list findings or point at doctor: %q", stdout)
+	}
+}
+
+// TestRenderTrainQualitySummaryContent verifies the summary renderer: a thin
+// corpus yields a weak headline, an actionable line, and a doctor pointer, while a
+// clean report yields a single good line.
+func TestRenderTrainQualitySummaryContent(t *testing.T) {
+	t.Parallel()
+
 	workDir := t.TempDir()
 	postsDir := filepath.Join(workDir, "posts")
 	thinCorpus(t, postsDir)
@@ -216,19 +238,22 @@ func TestRenderQualityNotesContent(t *testing.T) {
 	report := quality.AssessCorpus(dist, app.qualityDocuments(docs), config.Default("test").Features)
 
 	var buf bytes.Buffer
-	renderQualityNotes(&buf, report, []string{"posts"})
+	renderTrainQualitySummary(&buf, report, []string{"posts"})
 	out := buf.String()
-	for _, want := range []string{"reliability", "→", "omokage doctor posts"} {
+	for _, want := range []string{"Corpus reliability: weak", "→", "omokage doctor posts"} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("quality note missing %q:\n%s", want, out)
+			t.Fatalf("quality summary missing %q:\n%s", want, out)
 		}
 	}
 
-	// A clean report renders nothing: silence is the no-action signal.
-	var quiet bytes.Buffer
-	renderQualityNotes(&quiet, quality.Report{}, []string{"posts"})
-	if quiet.Len() != 0 {
-		t.Fatalf("a clean report should render no note, got %q", quiet.String())
+	// A clean report renders just the one-line good rating, no findings.
+	var clean bytes.Buffer
+	renderTrainQualitySummary(&clean, quality.Report{}, []string{"posts"})
+	if !strings.Contains(clean.String(), "Corpus reliability: good.") {
+		t.Fatalf("a clean report should render the good line, got %q", clean.String())
+	}
+	if strings.Contains(clean.String(), "doctor") {
+		t.Fatalf("a clean report should not point at doctor, got %q", clean.String())
 	}
 }
 
@@ -264,5 +289,88 @@ func TestShowJSONReportsReliability(t *testing.T) {
 	}
 	if len(payload.QualityFindings) == 0 {
 		t.Fatal("a thin corpus profile should carry quality findings")
+	}
+}
+
+// TestShowJSONKeepsOutlierFindingFromTrain verifies that a per-document finding
+// (an outlier), which the stored distribution alone cannot reproduce, is recorded
+// at train time and surfaces through show — the gap the user reported.
+func TestShowJSONKeepsOutlierFindingFromTrain(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir()
+	dir := filepath.Join(workDir, "posts")
+	// Many consistent polite documents and one in a wholly different voice, so the
+	// odd one is recorded as an outlier finding.
+	for i := range 7 {
+		writeTestFile(t, filepath.Join(dir, fmt.Sprintf("p%d.md", i)),
+			"今日は良い天気でした。近所の公園まで散歩に出かけました。猫に出会い、しばらく眺めていました。とても穏やかな一日でした。")
+	}
+	writeTestFile(t, filepath.Join(dir, "odd.md"),
+		"OUTPUT FORMAT: JSON. RUN: omokage check --format json. SEE: docs/spec.md, table 3.4, row 12.")
+
+	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
+		t.Fatalf("init failed: %s", stderr)
+	}
+	if code, _, stderr := runApp(t, workDir, "train", "--author", "me", "posts"); code != 0 {
+		t.Fatalf("train failed: %s", stderr)
+	}
+
+	code, stdout, stderr := runApp(t, workDir, "show", "--author", "me", "--format", "json")
+	if code != 0 {
+		t.Fatalf("show --format json failed: stderr=%q", stderr)
+	}
+	var payload struct {
+		QualityFindings []struct {
+			Code string `json:"code"`
+		} `json:"quality_findings"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("show --format json invalid: %v\n%s", err, stdout)
+	}
+	found := false
+	for _, f := range payload.QualityFindings {
+		if f.Code == "outlier_documents" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the train-time outlier finding should survive into show: %+v", payload.QualityFindings)
+	}
+}
+
+// TestShowSummaryOmitsTermPreferences verifies --summary drops the term list for a
+// lighter JSON while keeping reliability and quality findings, and that the
+// default output keeps the term_preferences key.
+func TestShowSummaryOmitsTermPreferences(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir()
+	thinCorpus(t, filepath.Join(workDir, "posts"))
+	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
+		t.Fatalf("init failed: %s", stderr)
+	}
+	if code, _, stderr := runApp(t, workDir, "train", "--author", "me", "posts"); code != 0 {
+		t.Fatalf("train failed: %s", stderr)
+	}
+
+	// Default JSON keeps the term_preferences key (stable shape).
+	_, full, _ := runApp(t, workDir, "show", "--author", "me", "--format", "json")
+	if !strings.Contains(full, `"term_preferences"`) {
+		t.Fatalf("default show --format json should keep term_preferences: %s", full)
+	}
+
+	// --summary drops it but keeps reliability and quality findings.
+	_, summary, _ := runApp(t, workDir, "show", "--author", "me", "--format", "json", "--summary")
+	if strings.Contains(summary, `"term_preferences"`) {
+		t.Fatalf("--summary should omit term_preferences: %s", summary)
+	}
+	if !strings.Contains(summary, `"reliability"`) || !strings.Contains(summary, `"quality_findings"`) {
+		t.Fatalf("--summary should keep reliability and quality findings: %s", summary)
+	}
+	// The lighter payload must still be valid JSON.
+	var probe map[string]any
+	if err := json.Unmarshal([]byte(summary), &probe); err != nil {
+		t.Fatalf("--summary JSON invalid: %v\n%s", err, summary)
 	}
 }

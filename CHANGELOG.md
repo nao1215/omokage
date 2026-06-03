@@ -7,6 +7,25 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- After `train`, the corpus reliability (good/fair/weak) now prints on stdout for
+  everyone — a person, a script, and an LLM — rather than only at an interactive
+  terminal, so it matches what `train --help` promises. A thin or mixed corpus
+  lists what to fix and points at `doctor`; a clean corpus prints one line.
+- `show --format json` now reports the quality findings recorded at train time,
+  including the per-document findings (short files, outliers) the stored
+  distribution alone could not reproduce, so what `doctor` found stays visible
+  through `show`. `show` text gains a one-line `Reliability:` field. A new
+  `show --format json --summary` omits the (often large) `term_preferences` list
+  for a lighter payload to hand an LLM; the default output is unchanged.
+- `check --explain`/`--format json` now localizes drift to running-prose
+  paragraphs only. Headings, bullet and table blocks, and blockquotes are layout
+  rather than sentences to edit, so they are no longer reported as drifting
+  paragraphs; the whole-document score still measures them.
+- The README was shortened by more than half and leads with what omokage does and
+  does not do; the root help points at `doctor` for checking a corpus.
+
 ### Added
 
 - `doctor` command: checks whether a corpus is solid enough to train a reliable

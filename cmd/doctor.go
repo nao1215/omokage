@@ -144,16 +144,19 @@ func renderDoctorText(w io.Writer, report quality.Report) {
 	writeLine(w, qualityDisclaimer)
 }
 
-// renderQualityNotes prints the post-training hint to stderr: nothing when the
-// corpus looks clean, otherwise the reliability headline, each finding's summary
-// and next action, and a pointer to the full `doctor` report. It writes to stderr
-// so the trained-profile confirmation on stdout stays clean and script-friendly.
-func renderQualityNotes(w io.Writer, report quality.Report, inputs []string) {
+// renderTrainQualitySummary prints the corpus-reliability summary after training.
+// It is one line when the corpus looks fine ("Corpus reliability: good.") and
+// otherwise adds each finding's summary and next action plus a pointer to the
+// full `doctor` report. It writes to stdout (the caller passes a.stdout), not
+// gated behind a terminal, so a person, a script, and an LLM all see whether to
+// curate the corpus — which is what `train --help` promises.
+func renderTrainQualitySummary(w io.Writer, report quality.Report, inputs []string) {
+	writeLine(w)
 	if len(report.Findings) == 0 {
+		writef(w, "Corpus reliability: %s.\n", report.Reliability())
 		return
 	}
-	writeLine(w)
-	writef(w, "Note: comparisons against this corpus may be noisy (reliability: %s).\n", report.Reliability())
+	writef(w, "Corpus reliability: %s. Comparisons against this profile may be noisy.\n", report.Reliability())
 	for _, finding := range report.Findings {
 		writef(w, "- %s\n", finding.Summary)
 		if finding.Action != "" {
@@ -161,6 +164,34 @@ func renderQualityNotes(w io.Writer, report quality.Report, inputs []string) {
 		}
 	}
 	writef(w, "Run 'omokage doctor %s' for the full report.\n", strings.Join(inputs, " "))
+}
+
+// marshalQualityFindings serializes findings to the JSON stored in the profile,
+// using the same shape `doctor --format json` and `show --format json` emit so a
+// stored finding reads back identically. It never fails the caller: an unexpected
+// marshal error degrades to an empty list rather than aborting a trained profile.
+func marshalQualityFindings(findings []quality.Finding) []byte {
+	data, err := json.Marshal(toQualityFindingJSON(findings))
+	if err != nil {
+		return []byte("[]")
+	}
+	return data
+}
+
+// reliabilityFromFindings derives the one-word rating from stored findings the
+// same way quality.Report does, so `show` reports the rating training recorded
+// without recomputing it: weak if any warning, fair if any notice, else good.
+func reliabilityFromFindings(findings []qualityFindingJSON) string {
+	rating := quality.ReliabilityGood
+	for _, f := range findings {
+		switch f.Severity {
+		case quality.SeverityWarning.String():
+			return quality.ReliabilityWeak
+		case quality.SeverityNotice.String():
+			rating = quality.ReliabilityFair
+		}
+	}
+	return rating
 }
 
 type doctorJSON struct {

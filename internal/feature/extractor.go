@@ -121,9 +121,13 @@ func ExtractFileWithSegments(path string) (Metrics, []Segment, error) {
 	return ExtractText(text), ExtractSegments(text), nil
 }
 
-// ExtractSegments splits a document into paragraphs and extracts the features of
-// each, dropping whitespace-only paragraphs. The 1-based Index matches the
-// paragraph's position among the non-empty paragraphs so a report can name it.
+// ExtractSegments splits a document into prose paragraphs and extracts the
+// features of each, dropping whitespace-only paragraphs and ones that are not
+// running prose — a lone heading, a bullet or table block, a blockquote. Those
+// are layout, not sentences a writer edits for voice, so localizing drift to them
+// is noise; the whole-document score still measures them. The 1-based Index is
+// dense over the prose paragraphs that survive, so a report can name "paragraph
+// #N".
 func ExtractSegments(text string) []Segment {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	// Strip code and HTML on the whole document before splitting into paragraphs.
@@ -137,6 +141,9 @@ func ExtractSegments(text string) []Segment {
 	segments := make([]Segment, 0, len(paragraphs))
 	index := 0
 	for _, paragraph := range paragraphs {
+		if !looksLikeProse(paragraph) {
+			continue
+		}
 		metrics := ExtractText(paragraph)
 		if metrics.CharacterCount == 0 {
 			continue
@@ -150,6 +157,44 @@ func ExtractSegments(text string) []Segment {
 		})
 	}
 	return segments
+}
+
+// looksLikeProse reports whether a paragraph is running prose worth localizing
+// drift to, as opposed to layout. It rejects a paragraph whose lines are mostly
+// Markdown structure (a heading, a bullet or ordered list, a table, a blockquote)
+// and one with no sentence terminator at all (a bare heading or label). A normal
+// prose paragraph — sentences, few or no structure lines — passes. This narrows
+// only the paragraph-localization in the explain/JSON output; the whole-document
+// score still measures every paragraph.
+func looksLikeProse(paragraph string) bool {
+	var nonEmpty, structure int
+	for line := range strings.SplitSeq(paragraph, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		nonEmpty++
+		if isMarkdownStructureLine(trimmed) {
+			structure++
+		}
+	}
+	if nonEmpty == 0 {
+		return false
+	}
+	// Mostly structure lines (a heading, a bullet/table/quote block) is layout, not
+	// prose to edit for voice.
+	if structure*2 > nonEmpty {
+		return false
+	}
+	// Prose carries at least one sentence; a heading or a label line carries none.
+	return hasSentenceTerminator(paragraph)
+}
+
+// hasSentenceTerminator reports whether the text contains any sentence-ending
+// punctuation, in either script. It is the cheap "is there a sentence here at
+// all" test looksLikeProse uses to drop heading- and label-only paragraphs.
+func hasSentenceTerminator(text string) bool {
+	return strings.ContainsAny(text, ".!?。！？")
 }
 
 // Document pairs a corpus file with the features extracted from it. It lets a

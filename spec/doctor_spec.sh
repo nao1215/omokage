@@ -66,23 +66,30 @@ Describe 'omokage doctor'
     End
   End
 
-  Describe 'post-training note'
+  Describe 'post-training summary'
     BeforeEach 'fresh_project'
     AfterEach 'remove_project'
 
-    # The post-training note is shown only at an interactive console, never into a
-    # capture — the same contract as the check tip. shellspec captures the streams,
-    # so training a thin corpus here must keep both streams clean; a person at a
-    # terminal sees the nudge, and automation reads the assessment from `doctor`.
-    It 'keeps captured output clean after training a thin corpus'
+    # The corpus-reliability summary prints on stdout (not gated behind a terminal),
+    # so a person, a script, and an LLM all see whether to curate the corpus. A thin
+    # corpus reports weak and points at doctor; stderr stays clean.
+    It 'reports a thin corpus as weak and points at doctor'
       mkdir "$WORK/thin"
       printf '今日は晴れ。散歩した。\n' > "$WORK/thin/a.md"
       printf '本を読んだ。良かった。\n' > "$WORK/thin/b.md"
       When run omokage train --author thin thin
       The status should be success
       The output should include 'Trained author "thin"'
-      The output should not include 'reliability'
+      The output should include 'Corpus reliability: weak'
+      The output should include 'omokage doctor'
       The stderr should equal ''
+    End
+
+    It 'reports a solid corpus as good without pointing at doctor'
+      When run omokage train --author me ja/posts
+      The status should be success
+      The output should include 'Corpus reliability: good.'
+      The output should not include 'omokage doctor'
     End
   End
 End
