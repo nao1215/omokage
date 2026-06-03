@@ -147,6 +147,63 @@ Paragraphs that drift most:
 
 ![explain demo](./doc/img/explain.gif)
 
+## Building and checking a corpus
+
+omokage learns a *voice* from example text, so the scores are only as steady as
+the corpus behind them. A good corpus is several documents (aim for eight or
+more), each at least a few paragraphs long, all written in one consistent voice.
+A handful of one-line notes, or a folder that mixes formal docs with casual
+diary entries, will still train — but the measured spread is wide and the scores
+wobble.
+
+`doctor` checks a corpus before (or instead of) training it. It reads the files,
+trains nothing, writes nothing, and reports three things — is there enough
+material, are the documents long enough, and is the voice consistent — with a
+next step for each issue:
+
+```shell
+$ omokage doctor ~/writing/posts
+Corpus: 8 documents, 142 sentences, 5210 characters (avg 651 per document)
+Reliability: good
+
+No problems found: enough material, a consistent voice, and no obvious outliers.
+
+These checks look at sample size and consistency, not writing quality.
+```
+
+When something is off, it names it and what to do:
+
+```shell
+$ omokage doctor ~/drafts
+Corpus: 3 documents, 9 sentences, 140 characters (avg 46 per document)
+Reliability: weak
+
+Findings:
+- [warning] Only 3 documents. The measured spread is barely an estimate, so scores will be noisy.
+    → Add more samples of this voice; 8 or more documents give steadier scores.
+- [warning] 3 of 3 documents are short (under 150 characters).
+    a.md, b.md, c.md
+    → Short samples make per-document features (sentence length, register) jumpy; prefer samples of a few paragraphs, or merge very short notes.
+
+These checks look at sample size and consistency, not writing quality.
+```
+
+![doctor demo](./doc/img/doctor.gif)
+
+If a corpus mixes voices, `doctor` points at the feature it disagrees on (often
+the polite/plain register or the kanji/kana balance) and suggests splitting it
+into separate authors — one profile per voice you want to match. Use `--format
+json` for the same report as machine-readable data.
+
+After `train`, a short note at an interactive terminal flags the same issues and
+points back at `doctor`; it is silent when the corpus looks fine, and never
+written into a pipe, a redirect, or a script, so automation stays clean.
+`show --format json` carries a `reliability` rating and `quality_findings`
+derived from the stored profile, so you can read a trained profile's standing
+later without the original text (the per-document checks need the corpus, so run
+`doctor` for those). None of this judges the writing itself — only whether there
+is enough consistent material to measure a style reliably.
+
 ## Term preferences
 
 `train` also learns which surface form you use for a recurring term (`DB` vs
@@ -170,6 +227,14 @@ unchanged. Extraction is intentionally lightweight; half-width katakana and
 synonyms without a corpus-declared bridge are out of scope.
 
 ## Choosing the author
+
+`--author` is just a profile name; it does not have to be a person. A profile is
+one voice you want to match, so it is just as natural to name it for a purpose —
+`--author blog`, `--author docs`, `--author newsletter` — and train each on the
+writing that belongs to it. Because a profile captures one voice, keeping
+distinct kinds of writing in separate authors (rather than one mixed corpus)
+gives each steadier scores; `doctor` will nudge you toward this when a corpus
+looks mixed.
 
 `check` and `show` resolve the author in this order, so single-author use needs
 no flags and multi-author use stays unambiguous:
@@ -241,17 +306,51 @@ global store is the fallback used only when no local project is found. `--global
 forces the global store from anywhere, and `--config PATH` / `--profile-dir PATH`
 point omokage at a specific store.
 
-## Scripting
+## Output modes
 
-`--score-only` prints just the integer similarity, for shell pipelines:
+`check` has one input and a few ways to read the result; pick by what you are
+doing:
+
+- **default** — the similarity score and the top few differences. The everyday,
+  human-facing view, and intentionally lightweight.
+- **`--score-only`** — just the integer 0-100, for shell pipelines and pass/fail
+  gates.
+- **`--explain`** — a prioritized, per-feature drift report (each with the
+  draft's value, your trained mean ± spread, and a z-score) plus the paragraphs
+  that drift most. For final, by-hand tuning.
+- **`--format json`** — the same detail as `--explain` as one JSON object, plus
+  `term_warnings` for notation that differs from your learned preference. For a
+  tool or an LLM to read between rewrites.
+
+`--explain` and `--format json` do the extra work of splitting the draft into
+paragraphs, so they stay opt-in and plain `check` stays fast. `--score-only`
+cannot be combined with the structured modes — they answer different questions.
 
 ```shell
 $ score=$(omokage check --score-only draft.md)
 $ [ "$score" -ge 70 ] && echo "close enough"
 ```
 
-Use `--format json` (with `check` or `show`) when a tool or LLM needs the full
-structured report instead of a single number.
+## Using omokage with an LLM
+
+omokage is built to sit in a draft-and-revise loop with an LLM as much as with a
+person. Train once, then on each rewrite have the agent run `check --format json`
+and read the structured report back:
+
+```shell
+$ omokage check --author me --format json draft.md
+```
+
+The JSON leads with `high_level_drift` — the editable features (register, script
+balance, sentence shape), each with a `priority` and an `actionable` flag — so an
+agent knows what to change first. `low_level_drift` is the function-word and
+n-gram fingerprint as supporting detail, `segments` points at the paragraphs that
+drift most, and `term_warnings` flags any notation that differs from your learned
+preference (a separate layer that never changes the score). The agent edits, runs
+`check` again, and repeats until the similarity rises and the high-level drift
+clears. omokage tells the agent *how close the draft sits to your voice and where
+it strays* — it does not judge whether the draft is correct or good, so keep a
+human in that loop.
 
 ## How it scores
 
@@ -269,7 +368,7 @@ A check measures the same features on the draft and compares each one to how muc
 
 ## Limits
 
-omokage looks at style, not meaning. It cannot tell whether a draft is correct, original, or well written, only whether it resembles the voice it was trained on. It needs a reasonable amount of training text: with a few short documents the measured spread is wide and the scores are noisy. It separates Japanese authors more sharply than English ones, and two people who write in the same register will look more alike than they really are. It is not an AI-text detector; the score is similarity to a voice you trained, nothing more.
+omokage looks at style, not meaning. It cannot tell whether a draft is correct, original, or well written, only whether it resembles the voice it was trained on. It needs a reasonable amount of training text: with a few short documents the measured spread is wide and the scores are noisy — `doctor` and the `reliability` rating tell you when a corpus is in that thin or mixed territory, but they describe sample adequacy, not the quality of the writing. It separates Japanese authors more sharply than English ones, and two people who write in the same register will look more alike than they really are. It is not an AI-text detector; the score is similarity to a voice you trained, nothing more.
 
 ## About the name
 

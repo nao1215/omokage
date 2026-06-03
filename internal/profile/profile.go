@@ -772,3 +772,149 @@ func clampPercent(value int) int {
 	}
 	return value
 }
+
+// DocumentDivergence reports how far a single document sits from a learned
+// distribution, as the mean absolute z-score of the interpretable, paragraph-
+// localizable features: register, script balance, sentence length, punctuation.
+// It reuses the exact standardization Score uses, so a corpus-quality check can
+// flag a document that reads unlike the rest of the corpus with the same notion
+// of "far" the score already trusts. It uses the localizable subset (not the
+// variance or layout features, which are noisy second-order quantities, nor the
+// function-word and n-gram fingerprint) because those are what a person means by
+// "this one document feels out of place". Returns 0 when no such feature is
+// shared, so a document with nothing to compare is never reported as an outlier.
+func DocumentDivergence(reference feature.Distribution, target feature.Metrics, flags config.Features) float64 {
+	drifts := scalarDrifts(reference, target, flags, localizableSpec)
+	if len(drifts) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, drift := range drifts {
+		sum += drift.Z
+	}
+	return sum / float64(len(drifts))
+}
+
+// LeaveOneOutDivergences returns, for each document, how far it sits from the
+// rest of the corpus: the mean absolute z-score of its interpretable localizable
+// features measured against the distribution of *every other* document. Measuring
+// each document against the others (rather than against a distribution it is
+// itself part of) removes the self-inflation that otherwise caps a lone outlier's
+// z-score — a single odd document widens the very spread it is then judged
+// against, which on a small corpus mathematically prevents it from ever looking
+// far out. The leave-one-out distribution fixes that, so the outlier signal is
+// meaningful at any corpus size, not only on large corpora.
+//
+// It reuses the same localizable feature set, std floor, and dead-feature rule as
+// DocumentDivergence, so the two agree on what "far" means. Returns one value per
+// input document (zero for each when there are fewer than two documents, since a
+// document has nothing to be an outlier from).
+func LeaveOneOutDivergences(samples []feature.Metrics, flags config.Features) []float64 {
+	out := make([]float64, len(samples))
+	n := len(samples)
+	if n < 2 {
+		return out
+	}
+
+	specs := make([]featureSpec, 0, len(featureSpecs))
+	for _, spec := range featureSpecs {
+		if spec.enabled(flags) && spec.localizable {
+			specs = append(specs, spec)
+		}
+	}
+	if len(specs) == 0 {
+		return out
+	}
+
+	// Running totals per feature, so each leave-one-out mean and variance is a
+	// subtraction rather than a fresh pass over the corpus: O(docs × features).
+	sums := make([]float64, len(specs))
+	sumSquares := make([]float64, len(specs))
+	for _, sample := range samples {
+		for i, spec := range specs {
+			v := spec.value(sample)
+			sums[i] += v
+			sumSquares[i] += v * v
+		}
+	}
+
+	others := float64(n - 1)
+	for d, sample := range samples {
+		var zSum float64
+		var count int
+		for i, spec := range specs {
+			v := spec.value(sample)
+			mean := (sums[i] - v) / others
+			// Population variance of the other documents, guarded against a tiny
+			// negative from floating-point cancellation.
+			variance := (sumSquares[i]-v*v)/others - mean*mean
+			if variance < 0 {
+				variance = 0
+			}
+			std := math.Sqrt(variance)
+			if mean == 0 && std == 0 && v == 0 {
+				continue
+			}
+			zSum += math.Abs(v-mean) / stdFloor(std, mean, spec.isRatio)
+			count++
+		}
+		if count > 0 {
+			out[d] = zSum / float64(count)
+		}
+	}
+	return out
+}
+
+// FeatureSpread describes how much one high-level feature varies across a trained
+// corpus. RelativeSpread is the standard deviation divided by the absolute mean,
+// so it is comparable across features of different scales: a value near or above
+// 1 means the feature swings as widely as its own average, the signature of a
+// corpus that mixes different kinds of writing.
+type FeatureSpread struct {
+	Feature        string
+	Mean           float64
+	StdDev         float64
+	RelativeSpread float64
+}
+
+// spreadMeanFloor is the smallest mean a feature must reach to be considered
+// "present" enough to judge its spread. Below it the feature barely appears in
+// the corpus, so its relative spread is dominated by rounding rather than by a
+// real mix of styles, and dividing by it would manufacture huge, meaningless
+// ratios.
+const spreadMeanFloor = 0.05
+
+// HighLevelSpreads reports the relative spread of each enabled, interpretable
+// feature that is meaningfully present in the corpus, sorted widest first. A
+// corpus-quality check uses it to point at the specific feature a mixed corpus
+// disagrees on (e.g. "your polite/plain register varies a lot"), rather than only
+// saying the corpus looks inconsistent. It considers the localizable subset —
+// register, script balance, sentence length, punctuation — the features a writer
+// reasons about as "consistent". The variance and layout features are excluded:
+// they are noisy second-order quantities whose relative spread is enormous on any
+// real corpus, so they would flag every corpus as mixed for an uninterpretable
+// reason. The diffuse function-word and n-gram fingerprint is excluded for the
+// same "not something a writer reasons about" reason.
+func HighLevelSpreads(dist feature.Distribution, flags config.Features) []FeatureSpread {
+	spreads := make([]FeatureSpread, 0, len(featureSpecs))
+	for _, spec := range featureSpecs {
+		if !spec.enabled(flags) || !spec.localizable {
+			continue
+		}
+		mean := spec.value(dist.Mean)
+		std := spec.value(dist.StdDev)
+		if math.Abs(mean) < spreadMeanFloor {
+			continue
+		}
+		spreads = append(spreads, FeatureSpread{
+			Feature:        spec.label,
+			Mean:           mean,
+			StdDev:         std,
+			RelativeSpread: std / math.Abs(mean),
+		})
+	}
+	sort.SliceStable(spreads, func(i int, j int) bool {
+		return spreads[i].RelativeSpread > spreads[j].RelativeSpread
+	})
+	return spreads
+}

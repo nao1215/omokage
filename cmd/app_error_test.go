@@ -37,7 +37,7 @@ func TestRunNoArgsShowsHelp(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d", code)
 	}
-	if !strings.Contains(stdout, "omokage analyzes writing style") {
+	if !strings.Contains(stdout, "omokage compares writing style") {
 		t.Fatalf("expected root help, got %q", stdout)
 	}
 }

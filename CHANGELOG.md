@@ -7,6 +7,39 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Added
+
+- `doctor` command: checks whether a corpus is solid enough to train a reliable
+  profile, without training or writing anything. It reports sample size, document
+  length, and how consistent the voice is, and names a next action for each issue
+  (too few documents, short documents, a mixed voice, or an out-of-place
+  document), so you can curate a corpus before training. `--format json` emits the
+  same report as machine-readable data, and it works without an initialized
+  project (falling back to the default feature weights, like `diff`). The checks
+  describe sample adequacy, not the quality of the writing.
+- After `train`, an interactive terminal now sees a short note when the corpus
+  looks thin or mixed, pointing back at `doctor`. It is silent when the corpus
+  looks fine and never written into a pipe, redirect, or script, so automation
+  keeps the clean trained-profile confirmation on stdout (the same contract as the
+  check tip). `show --format json` gains a `reliability` rating (`good`/`fair`/
+  `weak`) and a `quality_findings` array derived from the stored profile, so a
+  trained profile's standing can be read later without the original text.
+- The corpus-quality assessment surfaces an out-of-place document by measuring it
+  against the rest of the corpus (leave-one-out), so a single odd file is flagged
+  even on a small corpus, and a mixed voice is reported against the interpretable
+  feature it disagrees on (often the polite/plain register or the kanji/kana
+  balance) rather than a noisy second-order statistic.
+
+### Changed
+
+- The root help and the `train`, `check`, and `show` help were rewritten to be
+  scannable by a person and an LLM: the root help now lists the check output modes
+  (`--score-only`, `--explain`, `--format json`) and states that `--author` is
+  simply a profile name — a person, a persona, or a purpose like `blog` or `docs`.
+  The README documents how to build and check a corpus, using `--author` as a
+  purpose-named profile, the caveats of thin or mixed corpora, the output modes,
+  and a draft-and-revise loop with an LLM.
+
 ## [0.2.0] - 2026-06-02
 
 ### Added

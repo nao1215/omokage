@@ -152,26 +152,48 @@ func ExtractSegments(text string) []Segment {
 	return segments
 }
 
+// Document pairs a corpus file with the features extracted from it. It lets a
+// caller inspect the corpus per document (for a quality check that flags short
+// or out-of-place files) while still aggregating the same metrics into the
+// learned Distribution, so the two views never disagree.
+type Document struct {
+	Path    string
+	Metrics Metrics
+}
+
 // ExtractCorpus extracts features from each file independently and aggregates
 // them into a Distribution describing the mean and standard deviation of every
 // feature across the corpus.
 func ExtractCorpus(paths []string) (Distribution, error) {
+	dist, _, err := ExtractCorpusDocuments(paths)
+	return dist, err
+}
+
+// ExtractCorpusDocuments is ExtractCorpus plus the per-document metrics that fed
+// the aggregate. It reads each file once and returns both the Distribution and
+// the surviving documents (empty or whitespace-only files are dropped from both,
+// exactly as ExtractCorpus drops them from the aggregate), so a caller can assess
+// the corpus document by document without a second pass over the files.
+func ExtractCorpusDocuments(paths []string) (Distribution, []Document, error) {
+	docs := make([]Document, 0, len(paths))
 	perDoc := make([]Metrics, 0, len(paths))
 	for _, path := range paths {
 		data, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
-			return Distribution{}, fmt.Errorf("read %s: %w", path, err)
+			return Distribution{}, nil, fmt.Errorf("read %s: %w", path, err)
 		}
 		metrics := ExtractText(string(data))
 		// Empty or whitespace-only files contribute an all-zero feature vector
 		// that would drag the mean down and inflate the standard deviation, so
-		// they are excluded from the learned distribution.
+		// they are excluded from the learned distribution and from the per-document
+		// view.
 		if metrics.CharacterCount == 0 {
 			continue
 		}
 		perDoc = append(perDoc, metrics)
+		docs = append(docs, Document{Path: filepath.Clean(path), Metrics: metrics})
 	}
-	return Aggregate(perDoc), nil
+	return Aggregate(perDoc), docs, nil
 }
 
 // Aggregate reduces per-document metrics into a Distribution. Feature means and

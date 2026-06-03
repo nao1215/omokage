@@ -230,6 +230,49 @@ func TestExtractCorpusMissingFile(t *testing.T) {
 	}
 }
 
+func TestExtractCorpusDocumentsReturnsPerDocument(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "a.md"), "そして文章です。だから続きます。とても良いです。")
+	mustWrite(t, filepath.Join(root, "b.md"), "今日は散歩しました。気持ちが良かったです。また行きます。")
+	mustWrite(t, filepath.Join(root, "empty.md"), "   \n\n")
+
+	files, err := CollectFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dist, docs, err := ExtractCorpusDocuments(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The empty file is dropped from both the aggregate and the per-document view,
+	// so the two never disagree on which documents were learned.
+	if dist.DocumentCount != 2 {
+		t.Fatalf("expected 2 usable documents in the distribution, got %d", dist.DocumentCount)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 per-document entries, got %d", len(docs))
+	}
+	for _, doc := range docs {
+		if doc.Path == "" {
+			t.Fatal("each document should carry its path")
+		}
+		if doc.Metrics.CharacterCount == 0 {
+			t.Fatalf("a learned document should have content, got %q with zero characters", doc.Path)
+		}
+	}
+}
+
+func TestExtractCorpusDocumentsMissingFile(t *testing.T) {
+	t.Parallel()
+
+	if _, _, err := ExtractCorpusDocuments([]string{filepath.Join(t.TempDir(), "missing.md")}); err == nil {
+		t.Fatal("expected an error for a missing file")
+	}
+}
+
 func TestExtractSegments(t *testing.T) {
 	t.Parallel()
 

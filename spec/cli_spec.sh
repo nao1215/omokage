@@ -11,7 +11,7 @@ Describe 'omokage CLI surface'
     It 'prints help with no arguments'
       When run "$OMOKAGE_BIN"
       The status should be success
-      The output should include 'omokage analyzes writing style'
+      The output should include 'omokage compares writing style'
       The output should include 'Commands:'
       The output should include 'check'
     End
@@ -116,7 +116,7 @@ Describe 'omokage CLI surface'
     It 'still prints the root help for bare help'
       When run "$OMOKAGE_BIN" help
       The status should be success
-      The output should include 'omokage analyzes writing style'
+      The output should include 'omokage compares writing style'
       The output should include 'Commands:'
     End
 
