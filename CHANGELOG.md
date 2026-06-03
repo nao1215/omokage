@@ -7,24 +7,7 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
-### Changed
-
-- After `train`, the corpus reliability (good/fair/weak) now prints on stdout for
-  everyone — a person, a script, and an LLM — rather than only at an interactive
-  terminal, so it matches what `train --help` promises. A thin or mixed corpus
-  lists what to fix and points at `doctor`; a clean corpus prints one line.
-- `show --format json` now reports the quality findings recorded at train time,
-  including the per-document findings (short files, outliers) the stored
-  distribution alone could not reproduce, so what `doctor` found stays visible
-  through `show`. `show` text gains a one-line `Reliability:` field. A new
-  `show --format json --summary` omits the (often large) `term_preferences` list
-  for a lighter payload to hand an LLM; the default output is unchanged.
-- `check --explain`/`--format json` now localizes drift to running-prose
-  paragraphs only. Headings, bullet and table blocks, and blockquotes are layout
-  rather than sentences to edit, so they are no longer reported as drifting
-  paragraphs; the whole-document score still measures them.
-- The README was shortened by more than half and leads with what omokage does and
-  does not do; the root help points at `doctor` for checking a corpus.
+## [0.3.0] - 2026-06-03
 
 ### Added
 
@@ -36,28 +19,34 @@ and per-release binaries and notes are published from git tags by GoReleaser.
   same report as machine-readable data, and it works without an initialized
   project (falling back to the default feature weights, like `diff`). The checks
   describe sample adequacy, not the quality of the writing.
-- After `train`, an interactive terminal now sees a short note when the corpus
-  looks thin or mixed, pointing back at `doctor`. It is silent when the corpus
-  looks fine and never written into a pipe, redirect, or script, so automation
-  keeps the clean trained-profile confirmation on stdout (the same contract as the
-  check tip). `show --format json` gains a `reliability` rating (`good`/`fair`/
-  `weak`) and a `quality_findings` array derived from the stored profile, so a
-  trained profile's standing can be read later without the original text.
-- The corpus-quality assessment surfaces an out-of-place document by measuring it
-  against the rest of the corpus (leave-one-out), so a single odd file is flagged
-  even on a small corpus, and a mixed voice is reported against the interpretable
-  feature it disagrees on (often the polite/plain register or the kanji/kana
-  balance) rather than a noisy second-order statistic.
+- `train` now prints the corpus reliability (`good`/`fair`/`weak`) after training,
+  on stdout for a person, a script, and an LLM alike. A thin or mixed corpus lists
+  what to fix and points at `doctor`; a clean corpus prints one line.
+- `show` reports a profile's corpus reliability: a one-line `Reliability:` field
+  in the text view, and a `reliability` rating plus a `quality_findings` array in
+  `--format json`. The findings are the ones recorded at training time — including
+  the per-document outliers and short files the stored distribution alone could
+  not reproduce — so what `doctor` found stays visible through `show`.
+  `show --format json --summary` omits the (often large) `term_preferences` list
+  for a lighter payload to hand an LLM; the default output is unchanged.
+- Out-of-place documents are detected leave-one-out (each measured against the
+  rest of the corpus), so a single odd file is flagged even on a small corpus, and
+  a mixed voice is reported against the interpretable feature it disagrees on
+  (often the polite/plain register or the kanji/kana balance) rather than a noisy
+  second-order statistic.
 
 ### Changed
 
-- The root help and the `train`, `check`, and `show` help were rewritten to be
-  scannable by a person and an LLM: the root help now lists the check output modes
-  (`--score-only`, `--explain`, `--format json`) and states that `--author` is
+- `check --explain`/`--format json` now localizes drift to running-prose
+  paragraphs only. Headings, bullet and table blocks, and blockquotes are layout
+  rather than sentences to edit, so they are no longer reported as drifting
+  paragraphs; the whole-document score still measures them.
+- The root, `train`, `check`, and `show` help were rewritten to be scannable by a
+  person and an LLM: the root help lists the check output modes (`--score-only`,
+  `--explain`, `--format json`), points at `doctor`, and states that `--author` is
   simply a profile name — a person, a persona, or a purpose like `blog` or `docs`.
-  The README documents how to build and check a corpus, using `--author` as a
-  purpose-named profile, the caveats of thin or mixed corpora, the output modes,
-  and a draft-and-revise loop with an LLM.
+  The README was shortened by more than half and leads with what omokage does and
+  does not do.
 
 ## [0.2.0] - 2026-06-02
 
