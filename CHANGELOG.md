@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-11
+
 ### Changed
 
 - Japanese scoring now uses morphological analysis (kagome) where whitespace
