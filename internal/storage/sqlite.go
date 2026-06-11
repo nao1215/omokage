@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS profile (
   source_dir TEXT NOT NULL,
   trained_at TEXT NOT NULL,
   file_count INTEGER NOT NULL,
+  feature_version INTEGER NOT NULL DEFAULT 1,
   mean_average_sentence_length REAL NOT NULL,
   mean_sentence_length_variance REAL NOT NULL,
   mean_punctuation_frequency REAL NOT NULL,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS profile (
   mean_markdown_structure_density REAL NOT NULL,
   mean_polite_ending_ratio REAL NOT NULL,
   mean_plain_ending_ratio REAL NOT NULL,
+  mean_type_token_ratio REAL NOT NULL DEFAULT 0,
   std_average_sentence_length REAL NOT NULL,
   std_sentence_length_variance REAL NOT NULL,
   std_punctuation_frequency REAL NOT NULL,
@@ -49,6 +51,7 @@ CREATE TABLE IF NOT EXISTS profile (
   std_markdown_structure_density REAL NOT NULL,
   std_polite_ending_ratio REAL NOT NULL,
   std_plain_ending_ratio REAL NOT NULL,
+  std_type_token_ratio REAL NOT NULL DEFAULT 0,
   document_count INTEGER NOT NULL,
   sentence_count INTEGER NOT NULL,
   character_count INTEGER NOT NULL,
@@ -56,6 +59,8 @@ CREATE TABLE IF NOT EXISTS profile (
   std_lexical_frequencies TEXT NOT NULL DEFAULT '{}',
   mean_char_ngrams TEXT NOT NULL DEFAULT '{}',
   std_char_ngrams TEXT NOT NULL DEFAULT '{}',
+  mean_pos_ngrams TEXT NOT NULL DEFAULT '{}',
+  std_pos_ngrams TEXT NOT NULL DEFAULT '{}',
   sources TEXT NOT NULL DEFAULT '[]',
   quality_findings TEXT NOT NULL DEFAULT '[]'
 );
@@ -92,6 +97,11 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	for _, column := range []string{
 		`ALTER TABLE profile ADD COLUMN sources TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE profile ADD COLUMN quality_findings TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE profile ADD COLUMN mean_pos_ngrams TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE profile ADD COLUMN std_pos_ngrams TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE profile ADD COLUMN feature_version INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE profile ADD COLUMN mean_type_token_ratio REAL NOT NULL DEFAULT 0`,
+		`ALTER TABLE profile ADD COLUMN std_type_token_ratio REAL NOT NULL DEFAULT 0`,
 	} {
 		if _, err := db.ExecContext(ctx, column); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return err
@@ -121,27 +131,28 @@ func SaveProfile(path string, record profile.Record) error {
 
 	const query = `
 INSERT INTO profile (
-  id, author, source_dir, trained_at, file_count,
+  id, author, source_dir, trained_at, file_count, feature_version,
   mean_average_sentence_length, mean_sentence_length_variance, mean_punctuation_frequency,
   mean_newline_frequency, mean_bullet_ratio, mean_conjunction_frequency,
   mean_kanji_ratio, mean_hiragana_ratio, mean_katakana_ratio,
   mean_paragraph_length_variance, mean_markdown_structure_density,
-  mean_polite_ending_ratio, mean_plain_ending_ratio,
+  mean_polite_ending_ratio, mean_plain_ending_ratio, mean_type_token_ratio,
   std_average_sentence_length, std_sentence_length_variance, std_punctuation_frequency,
   std_newline_frequency, std_bullet_ratio, std_conjunction_frequency,
   std_kanji_ratio, std_hiragana_ratio, std_katakana_ratio,
   std_paragraph_length_variance, std_markdown_structure_density,
-  std_polite_ending_ratio, std_plain_ending_ratio,
+  std_polite_ending_ratio, std_plain_ending_ratio, std_type_token_ratio,
   document_count, sentence_count, character_count,
   mean_lexical_frequencies, std_lexical_frequencies,
-  mean_char_ngrams, std_char_ngrams, sources
+  mean_char_ngrams, std_char_ngrams, mean_pos_ngrams, std_pos_ngrams, sources
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   author = excluded.author,
   source_dir = excluded.source_dir,
   trained_at = excluded.trained_at,
   file_count = excluded.file_count,
+  feature_version = excluded.feature_version,
   mean_average_sentence_length = excluded.mean_average_sentence_length,
   mean_sentence_length_variance = excluded.mean_sentence_length_variance,
   mean_punctuation_frequency = excluded.mean_punctuation_frequency,
@@ -155,6 +166,7 @@ ON CONFLICT(id) DO UPDATE SET
   mean_markdown_structure_density = excluded.mean_markdown_structure_density,
   mean_polite_ending_ratio = excluded.mean_polite_ending_ratio,
   mean_plain_ending_ratio = excluded.mean_plain_ending_ratio,
+  mean_type_token_ratio = excluded.mean_type_token_ratio,
   std_average_sentence_length = excluded.std_average_sentence_length,
   std_sentence_length_variance = excluded.std_sentence_length_variance,
   std_punctuation_frequency = excluded.std_punctuation_frequency,
@@ -168,6 +180,7 @@ ON CONFLICT(id) DO UPDATE SET
   std_markdown_structure_density = excluded.std_markdown_structure_density,
   std_polite_ending_ratio = excluded.std_polite_ending_ratio,
   std_plain_ending_ratio = excluded.std_plain_ending_ratio,
+  std_type_token_ratio = excluded.std_type_token_ratio,
   document_count = excluded.document_count,
   sentence_count = excluded.sentence_count,
   character_count = excluded.character_count,
@@ -175,6 +188,8 @@ ON CONFLICT(id) DO UPDATE SET
   std_lexical_frequencies = excluded.std_lexical_frequencies,
   mean_char_ngrams = excluded.mean_char_ngrams,
   std_char_ngrams = excluded.std_char_ngrams,
+  mean_pos_ngrams = excluded.mean_pos_ngrams,
+  std_pos_ngrams = excluded.std_pos_ngrams,
   sources = excluded.sources;
 `
 
@@ -188,6 +203,7 @@ ON CONFLICT(id) DO UPDATE SET
 		record.SourceDir,
 		record.TrainedAt.Format(time.RFC3339),
 		record.FileCount,
+		featureVersionOrDefault(record.FeatureVersion),
 		mean.AverageSentenceLength,
 		mean.SentenceLengthVariance,
 		mean.PunctuationFrequency,
@@ -201,6 +217,7 @@ ON CONFLICT(id) DO UPDATE SET
 		mean.MarkdownStructureDensity,
 		mean.PoliteEndingRatio,
 		mean.PlainEndingRatio,
+		mean.TypeTokenRatio,
 		std.AverageSentenceLength,
 		std.SentenceLengthVariance,
 		std.PunctuationFrequency,
@@ -214,6 +231,7 @@ ON CONFLICT(id) DO UPDATE SET
 		std.MarkdownStructureDensity,
 		std.PoliteEndingRatio,
 		std.PlainEndingRatio,
+		std.TypeTokenRatio,
 		record.Distribution.DocumentCount,
 		record.Distribution.SentenceCount,
 		record.Distribution.CharacterCount,
@@ -221,9 +239,21 @@ ON CONFLICT(id) DO UPDATE SET
 		marshalLexical(std.LexicalFrequencies),
 		marshalLexical(mean.CharNgrams),
 		marshalLexical(std.CharNgrams),
+		marshalLexical(mean.POSNgrams),
+		marshalLexical(std.POSNgrams),
 		marshalSources(record.Sources),
 	)
 	return err
+}
+
+// featureVersionOrDefault maps an unset feature version (0, e.g. a record built
+// in a test or loaded from before the column existed) to 1, the original feature
+// definitions, so the stored value is always a real version.
+func featureVersionOrDefault(v int) int {
+	if v < 1 {
+		return 1
+	}
+	return v
 }
 
 // marshalSources serializes the list of learning-source paths to a JSON array
@@ -282,6 +312,7 @@ SELECT
   source_dir,
   trained_at,
   file_count,
+  feature_version,
   mean_average_sentence_length,
   mean_sentence_length_variance,
   mean_punctuation_frequency,
@@ -295,6 +326,7 @@ SELECT
   mean_markdown_structure_density,
   mean_polite_ending_ratio,
   mean_plain_ending_ratio,
+  mean_type_token_ratio,
   std_average_sentence_length,
   std_sentence_length_variance,
   std_punctuation_frequency,
@@ -308,6 +340,7 @@ SELECT
   std_markdown_structure_density,
   std_polite_ending_ratio,
   std_plain_ending_ratio,
+  std_type_token_ratio,
   document_count,
   sentence_count,
   character_count,
@@ -315,6 +348,8 @@ SELECT
   std_lexical_frequencies,
   mean_char_ngrams,
   std_char_ngrams,
+  mean_pos_ngrams,
+  std_pos_ngrams,
   sources
 FROM profile
 WHERE id = 1
@@ -325,6 +360,8 @@ WHERE id = 1
 	var stdLexicalJSON string
 	var meanNgramJSON string
 	var stdNgramJSON string
+	var meanPOSNgramJSON string
+	var stdPOSNgramJSON string
 	var sourcesJSON string
 	var record profile.Record
 	var mean feature.Metrics
@@ -335,6 +372,7 @@ WHERE id = 1
 		&record.SourceDir,
 		&trainedAt,
 		&record.FileCount,
+		&record.FeatureVersion,
 		&mean.AverageSentenceLength,
 		&mean.SentenceLengthVariance,
 		&mean.PunctuationFrequency,
@@ -348,6 +386,7 @@ WHERE id = 1
 		&mean.MarkdownStructureDensity,
 		&mean.PoliteEndingRatio,
 		&mean.PlainEndingRatio,
+		&mean.TypeTokenRatio,
 		&std.AverageSentenceLength,
 		&std.SentenceLengthVariance,
 		&std.PunctuationFrequency,
@@ -361,6 +400,7 @@ WHERE id = 1
 		&std.MarkdownStructureDensity,
 		&std.PoliteEndingRatio,
 		&std.PlainEndingRatio,
+		&std.TypeTokenRatio,
 		&dist.DocumentCount,
 		&dist.SentenceCount,
 		&dist.CharacterCount,
@@ -368,6 +408,8 @@ WHERE id = 1
 		&stdLexicalJSON,
 		&meanNgramJSON,
 		&stdNgramJSON,
+		&meanPOSNgramJSON,
+		&stdPOSNgramJSON,
 		&sourcesJSON,
 	); err != nil {
 		if err == sql.ErrNoRows {
@@ -384,6 +426,8 @@ WHERE id = 1
 	std.LexicalFrequencies = unmarshalLexical(stdLexicalJSON)
 	mean.CharNgrams = unmarshalLexical(meanNgramJSON)
 	std.CharNgrams = unmarshalLexical(stdNgramJSON)
+	mean.POSNgrams = unmarshalLexical(meanPOSNgramJSON)
+	std.POSNgrams = unmarshalLexical(stdPOSNgramJSON)
 	dist.Mean = mean
 	dist.StdDev = std
 	record.Distribution = dist

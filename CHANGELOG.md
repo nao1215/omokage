@@ -7,6 +7,27 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Japanese scoring now uses morphological analysis (kagome) where whitespace
+  tokenization cannot: the function-word fingerprint counts particles and
+  auxiliaries as whole morphemes instead of substrings (no more double-counting で
+  inside です or matching は inside a content word), the polite/plain register is
+  classified from each sentence's closing predicate rather than a kana-suffix
+  heuristic, and conjunction frequency uses a real morpheme denominator instead of
+  treating a whole clause as one token. On a held-out author-attribution test
+  (four authors, blog posts and stream transcripts) this improved accuracy over
+  the previous heuristics. English prose is unchanged (language-neutral path).
+- Two further Japanese features are available behind config flags, off by default
+  because the same test showed they did not help: a part-of-speech n-gram
+  fingerprint (`pos_ngram_frequency`) and lemma-based vocabulary richness
+  (`type_token_ratio`). Profiles trained before this release gain the new columns
+  on next save via an additive migration; the new map features stay empty until
+  retrained.
+- Profiles now record the feature-definition version they were trained with;
+  `check` warns when it differs from the running build, since the stored mean/std
+  then describe a different measurement than the target being scored.
+
 ## [0.3.0] - 2026-06-03
 
 ### Added

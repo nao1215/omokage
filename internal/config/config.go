@@ -44,6 +44,8 @@ type Features struct {
 	PlainEndingRatio         bool
 	LexicalFrequency         bool
 	CharNgramFrequency       bool
+	TypeTokenRatio           bool
+	POSNgramFrequency        bool
 }
 
 type Storage struct {
@@ -72,6 +74,15 @@ func Default(projectName string) Config {
 			PlainEndingRatio:         true,
 			LexicalFrequency:         true,
 			CharNgramFrequency:       true,
+			// Vocabulary richness (P5, type-token ratio) is opt-in: on the validation
+			// corpus it did not improve author attribution and slightly regressed it,
+			// so it is off by default and enabled with type_token_ratio = true.
+			TypeTokenRatio: false,
+			// POS n-gram fingerprint (P4) is opt-in: it adds a syntactic dimension
+			// that helps separate similar authors on a substantial corpus, but its
+			// large per-n-gram frequencies destabilize scoring on a very small corpus,
+			// so it is off by default and enabled with pos_ngram_frequency = true.
+			POSNgramFrequency: false,
 		},
 		Storage: Storage{
 			ProfileDir: "./profiles",
@@ -162,6 +173,10 @@ func Parse(data []byte) (Config, error) {
 				cfg.Features.LexicalFrequency = parsed
 			case "char_ngram_frequency":
 				cfg.Features.CharNgramFrequency = parsed
+			case "type_token_ratio":
+				cfg.Features.TypeTokenRatio = parsed
+			case "pos_ngram_frequency":
+				cfg.Features.POSNgramFrequency = parsed
 			}
 		case "storage":
 			parsed, err := parseString(value)
@@ -210,6 +225,8 @@ polite_ending_ratio = %t
 plain_ending_ratio = %t
 lexical_frequency = %t
 char_ngram_frequency = %t
+type_token_ratio = %t
+pos_ngram_frequency = %t
 
 [storage]
 profile_dir = %q
@@ -232,6 +249,8 @@ cache_dir = %q
 		c.Features.PlainEndingRatio,
 		c.Features.LexicalFrequency,
 		c.Features.CharNgramFrequency,
+		c.Features.TypeTokenRatio,
+		c.Features.POSNgramFrequency,
 		c.Storage.ProfileDir,
 		c.Storage.CacheDir,
 	)

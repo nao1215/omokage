@@ -10,6 +10,15 @@ import (
 	"unicode"
 )
 
+// Version identifies the feature-definition generation a profile was trained
+// with. It is bumped whenever an existing feature's measurement changes (not when
+// a new feature is merely added), so a check can warn that a profile trained by
+// an older omokage is being compared with newly-defined target metrics. Version 1
+// was the original whitespace/heuristic definitions; version 2 introduced the
+// kagome morphological measurement of conjunction frequency, the polite/plain
+// register, and the Japanese function-word fingerprint.
+const Version = 2
+
 type Metrics struct {
 	AverageSentenceLength    float64
 	SentenceLengthVariance   float64
@@ -24,8 +33,11 @@ type Metrics struct {
 	MarkdownStructureDensity float64
 	PoliteEndingRatio        float64
 	PlainEndingRatio         float64
-	SentenceCount            int
-	CharacterCount           int
+	// TypeTokenRatio is the lemma-based vocabulary richness (P5): distinct content
+	// lemmas over content morphemes, for Japanese prose (0 otherwise).
+	TypeTokenRatio float64
+	SentenceCount  int
+	CharacterCount int
 	// LexicalFrequencies holds the per-function-word relative frequency vector
 	// keyed by LexicalVocabulary(). On a Distribution's Mean/StdDev it carries
 	// the per-word mean and standard deviation across the corpus.
@@ -35,6 +47,12 @@ type Metrics struct {
 	// it is restricted to the author's most frequent bigrams (see aggregateCharNgrams),
 	// which form a language-independent stylometric fingerprint.
 	CharNgrams map[string]float64
+	// POSNgrams holds the relative frequency of part-of-speech bigrams and trigrams
+	// (P4), capturing how a Japanese author builds sentences independently of
+	// vocabulary. It is populated only for Japanese prose; English documents leave
+	// it empty. On a Distribution it is restricted to the author's most frequent
+	// POS n-grams (see aggregatePOSNgrams).
+	POSNgrams map[string]float64
 }
 
 // Distribution captures the per-document spread of a corpus. An author profile
@@ -264,6 +282,7 @@ func Aggregate(perDoc []Metrics) Distribution {
 		dist.Mean.MarkdownStructureDensity += m.MarkdownStructureDensity
 		dist.Mean.PoliteEndingRatio += m.PoliteEndingRatio
 		dist.Mean.PlainEndingRatio += m.PlainEndingRatio
+		dist.Mean.TypeTokenRatio += m.TypeTokenRatio
 		dist.SentenceCount += m.SentenceCount
 		dist.CharacterCount += m.CharacterCount
 	}
@@ -282,6 +301,7 @@ func Aggregate(perDoc []Metrics) Distribution {
 	dist.Mean.MarkdownStructureDensity /= n
 	dist.Mean.PoliteEndingRatio /= n
 	dist.Mean.PlainEndingRatio /= n
+	dist.Mean.TypeTokenRatio /= n
 
 	for _, m := range perDoc {
 		accumulateSquaredError(&dist.StdDev, m, dist.Mean)
@@ -290,6 +310,7 @@ func Aggregate(perDoc []Metrics) Distribution {
 
 	aggregateLexical(&dist, perDoc, n)
 	aggregateCharNgrams(&dist, perDoc, n)
+	aggregatePOSNgrams(&dist, perDoc, n)
 	return dist
 }
 
@@ -335,6 +356,7 @@ func accumulateSquaredError(acc *Metrics, sample Metrics, mean Metrics) {
 	acc.MarkdownStructureDensity += square(sample.MarkdownStructureDensity - mean.MarkdownStructureDensity)
 	acc.PoliteEndingRatio += square(sample.PoliteEndingRatio - mean.PoliteEndingRatio)
 	acc.PlainEndingRatio += square(sample.PlainEndingRatio - mean.PlainEndingRatio)
+	acc.TypeTokenRatio += square(sample.TypeTokenRatio - mean.TypeTokenRatio)
 }
 
 func finalizeStdDev(acc *Metrics, n float64) {
@@ -351,6 +373,7 @@ func finalizeStdDev(acc *Metrics, n float64) {
 	acc.MarkdownStructureDensity = math.Sqrt(acc.MarkdownStructureDensity / n)
 	acc.PoliteEndingRatio = math.Sqrt(acc.PoliteEndingRatio / n)
 	acc.PlainEndingRatio = math.Sqrt(acc.PlainEndingRatio / n)
+	acc.TypeTokenRatio = math.Sqrt(acc.TypeTokenRatio / n)
 }
 
 func square(value float64) float64 {
@@ -411,6 +434,21 @@ func ExtractText(text string) Metrics {
 	kanjiCount, hiraganaCount, katakanaCount := scriptCounts(prose)
 	scriptTotal := max(kanjiCount+hiraganaCount+katakanaCount, 1)
 	politeCount, plainCount := sentenceEndingStats(prose)
+	// Tokenize Japanese prose once and reuse the morphemes across every feature
+	// that whitespace tokenization cannot measure correctly: conjunction frequency
+	// (P1), the polite/plain register (P3), the function-word fingerprint (P2), and
+	// the POS n-gram fingerprint (P4). English prose keeps the language-neutral path
+	// and jpTokens stays nil.
+	var jpTokens []jpToken
+	var typeTokenRatio float64
+	if isJapanese(prose) {
+		jpTokens = tokenizeJapanese(prose)
+	}
+	if len(jpTokens) > 0 {
+		conjunctionCount, tokenCount = conjunctionStatsJP(jpTokens)
+		politeCount, plainCount = registerStatsJP(jpTokens)
+		typeTokenRatio = typeTokenRatioJP(jpTokens)
+	}
 	// Normalize sentence-ending forms by Japanese terminators (。！？) rather than
 	// len(sentences): the latter also splits on Latin "." and would over-count
 	// sentences in technical prose (version numbers, decimals), diluting the ratio.
@@ -430,10 +468,12 @@ func ExtractText(text string) Metrics {
 		MarkdownStructureDensity: ratio(structureLines, max(nonEmptyLines, 1)),
 		PoliteEndingRatio:        ratio(politeCount, japaneseSentences),
 		PlainEndingRatio:         ratio(plainCount, japaneseSentences),
+		TypeTokenRatio:           typeTokenRatio,
 		SentenceCount:            len(sentences),
 		CharacterCount:           characterCount,
-		LexicalFrequencies:       lexicalFrequencies(prose),
+		LexicalFrequencies:       lexicalFrequencies(prose, jpTokens),
 		CharNgrams:               charBigrams(prose),
+		POSNgrams:                posNgrams(jpTokens),
 	}
 }
 

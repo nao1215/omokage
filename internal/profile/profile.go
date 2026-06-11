@@ -25,10 +25,16 @@ type Record struct {
 	// individual files), as normalized absolute paths, de-duplicated. It is the
 	// provenance shown by `show`. Profiles written before this field existed load
 	// with Sources populated from SourceDir, so consumers can always rely on it.
-	Sources      []string
-	TrainedAt    time.Time
-	FileCount    int
-	Distribution feature.Distribution
+	Sources   []string
+	TrainedAt time.Time
+	FileCount int
+	// FeatureVersion is the feature.Version the profile was trained with. A profile
+	// trained before this field existed loads as 0; the storage layer maps that to
+	// version 1 (the original definitions). check compares it against the running
+	// feature.Version and warns on a mismatch, since the stored mean/std then
+	// describe a different measurement than the target being scored.
+	FeatureVersion int
+	Distribution   feature.Distribution
 }
 
 type Comparison struct {
@@ -62,6 +68,7 @@ const (
 	categoryScript       = "script"
 	categoryFunctionWord = "function-word"
 	categoryCharNgram    = "char-ngram"
+	categoryPOSNgram     = "pos-ngram"
 )
 
 const (
@@ -71,7 +78,7 @@ const (
 
 func levelOf(category string) string {
 	switch category {
-	case categoryFunctionWord, categoryCharNgram:
+	case categoryFunctionWord, categoryCharNgram, categoryPOSNgram:
 		return levelLow
 	default:
 		return levelHigh
@@ -118,6 +125,7 @@ var featureSpecs = []featureSpec{
 	{"markdown structure frequency", categoryStructure, func(f config.Features) bool { return f.MarkdownStructureDensity }, func(m feature.Metrics) float64 { return m.MarkdownStructureDensity }, true, false},
 	{"polite sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PoliteEndingRatio }, func(m feature.Metrics) float64 { return m.PoliteEndingRatio }, true, true},
 	{"plain sentence-ending ratio", categoryRegister, func(f config.Features) bool { return f.PlainEndingRatio }, func(m feature.Metrics) float64 { return m.PlainEndingRatio }, true, true},
+	{"vocabulary richness (type-token ratio)", categoryStructure, func(f config.Features) bool { return f.TypeTokenRatio }, func(m feature.Metrics) float64 { return m.TypeTokenRatio }, true, false},
 }
 
 // FeatureDrift is the full, per-feature comparison that backs the explain output.
@@ -242,6 +250,9 @@ func featureDrifts(reference feature.Distribution, target feature.Metrics, flags
 	if flags.CharNgramFrequency {
 		capacity += len(reference.Mean.CharNgrams)
 	}
+	if flags.POSNgramFrequency {
+		capacity += len(reference.Mean.POSNgrams)
+	}
 	drifts := make([]FeatureDrift, 0, capacity)
 	drifts = append(drifts, scalarDrifts(reference, target, flags, everySpec)...)
 
@@ -286,6 +297,26 @@ func featureDrifts(reference feature.Distribution, target feature.Metrics, flags
 		}
 	}
 
+	if flags.POSNgramFrequency {
+		for ngram, mean := range reference.Mean.POSNgrams {
+			std := reference.StdDev.POSNgrams[ngram]
+			observed := target.POSNgrams[ngram]
+			if mean == 0 && std == 0 && observed == 0 {
+				continue
+			}
+			drifts = append(drifts, FeatureDrift{
+				Feature:   fmt.Sprintf("part-of-speech n-gram %q", ngram),
+				Category:  categoryPOSNgram,
+				Level:     levelLow,
+				Target:    observed,
+				Mean:      mean,
+				StdDev:    std,
+				Z:         math.Abs(observed-mean) / lexicalStdFloor(std, mean),
+				Direction: direction(mean, observed),
+			})
+		}
+	}
+
 	return drifts
 }
 
@@ -305,7 +336,7 @@ func similarityFromDrifts(drifts []FeatureDrift) int {
 		case categoryFunctionWord:
 			functionWordZ += drift.Z
 			functionWordCount++
-		case categoryCharNgram:
+		case categoryCharNgram, categoryPOSNgram:
 			ngramZ += drift.Z
 			ngramCount++
 		default:
@@ -575,6 +606,31 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 			ngramCount++
 			results = append(results, scored{
 				label:     fmt.Sprintf("character n-gram %q", ngram),
+				distance:  distance,
+				direction: direction(left, right),
+			})
+		}
+	}
+
+	if flags.POSNgramFrequency {
+		seen := make(map[string]struct{}, len(reference.POSNgrams)+len(target.POSNgrams))
+		for ngram := range reference.POSNgrams {
+			seen[ngram] = struct{}{}
+		}
+		for ngram := range target.POSNgrams {
+			seen[ngram] = struct{}{}
+		}
+		for ngram := range seen {
+			left := reference.POSNgrams[ngram]
+			right := target.POSNgrams[ngram]
+			if left == 0 && right == 0 {
+				continue
+			}
+			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
+			ngramDist += distance
+			ngramCount++
+			results = append(results, scored{
+				label:     fmt.Sprintf("part-of-speech n-gram %q", ngram),
 				distance:  distance,
 				direction: direction(left, right),
 			})

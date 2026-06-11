@@ -388,12 +388,13 @@ func (a *App) runTrain(args []string) int {
 	}
 
 	record := profile.Record{
-		Author:       *author,
-		SourceDir:    legacySourceDir(sources),
-		Sources:      sources,
-		TrainedAt:    time.Now().UTC(),
-		FileCount:    len(files),
-		Distribution: distribution,
+		Author:         *author,
+		SourceDir:      legacySourceDir(sources),
+		Sources:        sources,
+		TrainedAt:      time.Now().UTC(),
+		FileCount:      len(files),
+		FeatureVersion: feature.Version,
+		Distribution:   distribution,
 	}
 	if err := storage.SaveProfile(profilePath, record); err != nil {
 		writeLine(a.stderr, err)
@@ -513,6 +514,7 @@ func (a *App) runCheck(args []string) int {
 		writeLine(a.stderr, err)
 		return 1
 	}
+	a.warnFeatureVersion(record)
 
 	targetPath, err := resolvePath(a.workDir, flagSet.Arg(0))
 	if err != nil {
@@ -581,6 +583,18 @@ func (a *App) runCheck(args []string) int {
 	}
 	renderExplanationText(a.stdout, record.Author, explanation)
 	return 0
+}
+
+// warnFeatureVersion notes, on stderr, when a profile was trained with a
+// different feature-definition generation than the running binary. The stored
+// mean/std then describe a different measurement than the target being scored, so
+// the similarity is not directly trustworthy until the profile is retrained. It
+// is a warning, not an error: the comparison still runs.
+func (a *App) warnFeatureVersion(record profile.Record) {
+	if record.FeatureVersion != feature.Version {
+		writef(a.stderr, "warning: profile %q was trained with an older feature set (v%d, this build uses v%d); scores may be off until you retrain it with 'omokage train'.\n",
+			record.Author, record.FeatureVersion, feature.Version)
+	}
 }
 
 func (a *App) runDiff(args []string) int {
