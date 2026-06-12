@@ -395,6 +395,7 @@ func (a *App) runTrain(args []string) int {
 		FileCount:      len(files),
 		FeatureVersion: feature.Version,
 		Distribution:   distribution,
+		SelfSimilarity: profile.ComputeSelfSimilarityStats(documentMetrics(docs), scope.Config.Features),
 	}
 	if err := storage.SaveProfile(profilePath, record); err != nil {
 		writeLine(a.stderr, err)
@@ -1384,6 +1385,14 @@ func renderComparison(w io.Writer, opt renderOptions) {
 	for _, difference := range opt.comparison.Differences {
 		writef(w, "- %s\n", difference)
 	}
+}
+
+func documentMetrics(docs []feature.Document) []feature.Metrics {
+	metrics := make([]feature.Metrics, 0, len(docs))
+	for _, doc := range docs {
+		metrics = append(metrics, doc.Metrics)
+	}
+	return metrics
 }
 
 // isTerminal reports whether the writer is an interactive terminal. It is used to

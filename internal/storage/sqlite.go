@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS profile (
   mean_pos_ngrams TEXT NOT NULL DEFAULT '{}',
   std_pos_ngrams TEXT NOT NULL DEFAULT '{}',
   sources TEXT NOT NULL DEFAULT '[]',
-  quality_findings TEXT NOT NULL DEFAULT '[]'
+  quality_findings TEXT NOT NULL DEFAULT '[]',
+  self_similarity_stats TEXT
 );
 
 -- Term preferences are profile-local: this database holds exactly one author's
@@ -102,6 +103,7 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		`ALTER TABLE profile ADD COLUMN feature_version INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE profile ADD COLUMN mean_type_token_ratio REAL NOT NULL DEFAULT 0`,
 		`ALTER TABLE profile ADD COLUMN std_type_token_ratio REAL NOT NULL DEFAULT 0`,
+		`ALTER TABLE profile ADD COLUMN self_similarity_stats TEXT`,
 	} {
 		if _, err := db.ExecContext(ctx, column); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return err
@@ -144,9 +146,10 @@ INSERT INTO profile (
   std_polite_ending_ratio, std_plain_ending_ratio, std_type_token_ratio,
   document_count, sentence_count, character_count,
   mean_lexical_frequencies, std_lexical_frequencies,
-  mean_char_ngrams, std_char_ngrams, mean_pos_ngrams, std_pos_ngrams, sources
+  mean_char_ngrams, std_char_ngrams, mean_pos_ngrams, std_pos_ngrams, sources,
+  self_similarity_stats
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   author = excluded.author,
   source_dir = excluded.source_dir,
@@ -190,7 +193,8 @@ ON CONFLICT(id) DO UPDATE SET
   std_char_ngrams = excluded.std_char_ngrams,
   mean_pos_ngrams = excluded.mean_pos_ngrams,
   std_pos_ngrams = excluded.std_pos_ngrams,
-  sources = excluded.sources;
+  sources = excluded.sources,
+  self_similarity_stats = excluded.self_similarity_stats;
 `
 
 	mean := record.Distribution.Mean
@@ -242,6 +246,7 @@ ON CONFLICT(id) DO UPDATE SET
 		marshalLexical(mean.POSNgrams),
 		marshalLexical(std.POSNgrams),
 		marshalSources(record.Sources),
+		marshalSelfSimilarity(record.SelfSimilarity),
 	)
 	return err
 }
@@ -279,6 +284,17 @@ func marshalLexical(vector map[string]float64) string {
 	encoded, err := json.Marshal(vector)
 	if err != nil {
 		return "{}"
+	}
+	return string(encoded)
+}
+
+func marshalSelfSimilarity(stats *profile.SelfSimilarityStats) any {
+	if stats == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(stats)
+	if err != nil {
+		return nil
 	}
 	return string(encoded)
 }
@@ -350,7 +366,8 @@ SELECT
   std_char_ngrams,
   mean_pos_ngrams,
   std_pos_ngrams,
-  sources
+  sources,
+  self_similarity_stats
 FROM profile
 WHERE id = 1
 `)
@@ -363,6 +380,7 @@ WHERE id = 1
 	var meanPOSNgramJSON string
 	var stdPOSNgramJSON string
 	var sourcesJSON string
+	var selfSimilarityJSON sql.NullString
 	var record profile.Record
 	var mean feature.Metrics
 	var std feature.Metrics
@@ -411,6 +429,7 @@ WHERE id = 1
 		&meanPOSNgramJSON,
 		&stdPOSNgramJSON,
 		&sourcesJSON,
+		&selfSimilarityJSON,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return profile.Record{}, fmt.Errorf("profile not found: %s", path)
@@ -432,6 +451,7 @@ WHERE id = 1
 	dist.StdDev = std
 	record.Distribution = dist
 	record.Sources = unmarshalSources(sourcesJSON)
+	record.SelfSimilarity = unmarshalSelfSimilarity(selfSimilarityJSON)
 	// A profile trained before multi-input support has no sources list. Populate it
 	// from the single SourceDir so every consumer can rely on Sources being set.
 	if len(record.Sources) == 0 && record.SourceDir != "" {
@@ -464,4 +484,15 @@ func unmarshalLexical(encoded string) map[string]float64 {
 		return make(map[string]float64)
 	}
 	return vector
+}
+
+func unmarshalSelfSimilarity(encoded sql.NullString) *profile.SelfSimilarityStats {
+	if !encoded.Valid || encoded.String == "" {
+		return nil
+	}
+	var stats profile.SelfSimilarityStats
+	if err := json.Unmarshal([]byte(encoded.String), &stats); err != nil {
+		return nil
+	}
+	return &stats
 }

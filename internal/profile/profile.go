@@ -35,6 +35,22 @@ type Record struct {
 	// describe a different measurement than the target being scored.
 	FeatureVersion int
 	Distribution   feature.Distribution
+	// SelfSimilarity stores the leave-one-out self-similarity baseline measured at
+	// train time. Older profiles load with nil here and follow the legacy scoring
+	// path until retrained.
+	SelfSimilarity *SelfSimilarityStats
+}
+
+// SelfSimilarityStats summarizes how far each training document sits from the
+// rest of the corpus (leave-one-out mean z-score). The raw values are kept so
+// later score mappings and output anchors can derive exact medians/ranges
+// without recomputing the corpus.
+type SelfSimilarityStats struct {
+	MeanZ       []float64
+	MeanZMedian float64
+	MeanZSpread float64
+	MeanZMin    float64
+	MeanZMax    float64
 }
 
 type Comparison struct {
@@ -171,9 +187,11 @@ type SegmentDrift struct {
 // (high-level first, then the capped low-level fingerprint) and Segments points
 // at the paragraphs that drift most.
 type Explanation struct {
-	Similarity int
-	Drifts     []FeatureDrift
-	Segments   []SegmentDrift
+	Similarity  int
+	Drifts      []FeatureDrift
+	Segments    []SegmentDrift
+	ScoreDriver string
+	ScoreNote   string
 }
 
 // lowLevelExplainLimit caps how many low-level fingerprint drifts the explanation
@@ -222,13 +240,16 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 func Explain(reference feature.Distribution, target feature.Metrics, segments []feature.Segment, flags config.Features) Explanation {
 	drifts := featureDrifts(reference, target, flags)
 	similarity := 100
+	breakdown := summarizeDrifts(drifts)
 	if len(drifts) > 0 {
-		similarity = similarityFromDrifts(drifts)
+		similarity = similarityFromBreakdown(breakdown)
 	}
 	return Explanation{
-		Similarity: similarity,
-		Drifts:     prioritize(drifts),
-		Segments:   locateSegmentDrift(reference, segments, flags),
+		Similarity:  similarity,
+		Drifts:      prioritize(drifts),
+		Segments:    locateSegmentDrift(reference, segments, flags),
+		ScoreDriver: breakdown.driver(),
+		ScoreNote:   explanationScoreNote,
 	}
 }
 
@@ -326,6 +347,26 @@ func featureDrifts(reference feature.Distribution, target feature.Metrics, flags
 // the structural remainder nudge. Reconstructing the group means from the drift
 // list keeps a single source of truth instead of duplicating the accumulation.
 func similarityFromDrifts(drifts []FeatureDrift) int {
+	return similarityFromBreakdown(summarizeDrifts(drifts))
+}
+
+type groupCounts struct {
+	register     int
+	other        int
+	functionWord int
+	ngram        int
+}
+
+type driftBreakdown struct {
+	groups       groupDrift
+	counts       groupCounts
+	lexicalTerm  float64
+	registerTerm float64
+	otherTerm    float64
+	meanZ        float64
+}
+
+func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 	var registerZ, otherZ, functionWordZ, ngramZ float64
 	var registerCount, otherCount, functionWordCount, ngramCount int
 	for _, drift := range drifts {
@@ -344,13 +385,30 @@ func similarityFromDrifts(drifts []FeatureDrift) int {
 			otherCount++
 		}
 	}
-	meanZ := combineDrift(groupDrift{
+	groups := groupDrift{
 		register:     meanOf(registerZ, registerCount),
 		other:        meanOf(otherZ, otherCount),
 		functionWord: meanOf(functionWordZ, functionWordCount),
 		ngram:        meanOf(ngramZ, ngramCount),
-	})
-	return clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
+	}
+	breakdown := driftBreakdown{
+		groups: groups,
+		counts: groupCounts{
+			register:     registerCount,
+			other:        otherCount,
+			functionWord: functionWordCount,
+			ngram:        ngramCount,
+		},
+	}
+	breakdown.lexicalTerm = lexicalGroupMean(groups, breakdown.counts)
+	breakdown.registerTerm = registerWeight * registerExcess(groups.register)
+	breakdown.otherTerm = otherStructWeight * groups.other
+	breakdown.meanZ = combineDrift(groups)
+	return breakdown
+}
+
+func similarityFromBreakdown(b driftBreakdown) int {
+	return clampPercent(int(math.Round((1 - b.meanZ/zScoreScale) * 100)))
 }
 
 // topDifferences renders the default `check` output: the three highest-z drifts
@@ -731,6 +789,8 @@ type groupDrift struct {
 	ngram        float64
 }
 
+const explanationScoreNote = "This score is computed from the full fingerprint and structure mix; the paragraph-level scalar drift below is supporting detail and usually contributes less than the lexical fingerprint."
+
 // combineDrift fuses the feature groups into a single drift figure. The lexical
 // fingerprint leads, since it separates same-register and English authors; it is
 // the equal-weight mean of the function-word and character-n-gram sub-signals so
@@ -740,12 +800,11 @@ type groupDrift struct {
 // register flip (an LLM imitation, cross-language text) is charged sharply. The
 // noisy structural remainder only nudges the result.
 func combineDrift(g groupDrift) float64 {
-	lexical := meanOfPresent(g.functionWord, g.ngram)
-	registerExcess := g.register - registerTolerance
-	if registerExcess < 0 {
-		registerExcess = 0
-	}
-	return lexical + registerWeight*registerExcess + otherStructWeight*g.other
+	lexical := lexicalGroupMean(g, groupCounts{
+		functionWord: boolCount(g.functionWord != 0),
+		ngram:        boolCount(g.ngram != 0),
+	})
+	return lexical + registerWeight*registerExcess(g.register) + otherStructWeight*g.other
 }
 
 // registerCompareWeight is how much a register difference between two documents
@@ -767,8 +826,57 @@ const (
 // n-gram distances), a register difference is added with a fixed weight, and the
 // remaining structural features contribute a moderate share.
 func combineCompareDrift(g groupDrift) float64 {
-	lexical := meanOfPresent(g.functionWord, g.ngram)
+	lexical := lexicalGroupMean(g, groupCounts{
+		functionWord: boolCount(g.functionWord != 0),
+		ngram:        boolCount(g.ngram != 0),
+	})
 	return lexical + registerCompareWeight*g.register + otherCompareWeight*g.other
+}
+
+func lexicalGroupMean(g groupDrift, counts groupCounts) float64 {
+	return meanOfPresent(
+		weightedGroupValue(g.functionWord, counts.functionWord),
+		weightedGroupValue(g.ngram, counts.ngram),
+	)
+}
+
+func weightedGroupValue(value float64, count int) float64 {
+	if count == 0 {
+		return 0
+	}
+	return value
+}
+
+func registerExcess(register float64) float64 {
+	excess := register - registerTolerance
+	if excess < 0 {
+		return 0
+	}
+	return excess
+}
+
+func boolCount(ok bool) int {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func (b driftBreakdown) driver() string {
+	driver := "lexical"
+	best := b.lexicalTerm
+	if b.registerTerm > best {
+		driver = categoryRegister
+		best = b.registerTerm
+	}
+	if b.otherTerm > best {
+		driver = categoryStructure
+		best = b.otherTerm
+	}
+	if best == 0 {
+		return ""
+	}
+	return driver
 }
 
 // meanOfPresent averages the sub-signals that are actually present. A sub-signal
@@ -788,6 +896,61 @@ func meanOfPresent(values ...float64) float64 {
 		return 0
 	}
 	return sum / float64(count)
+}
+
+// ComputeSelfSimilarityStats measures, for each training document, the mean z
+// it scores against the aggregate of the other documents. The stored summary is
+// the train-time baseline that later check output and calibrated scoring reuse.
+func ComputeSelfSimilarityStats(samples []feature.Metrics, flags config.Features) *SelfSimilarityStats {
+	if len(samples) < 2 {
+		return nil
+	}
+	values := make([]float64, 0, len(samples))
+	for i, sample := range samples {
+		others := make([]feature.Metrics, 0, len(samples)-1)
+		others = append(others, samples[:i]...)
+		others = append(others, samples[i+1:]...)
+		drifts := featureDrifts(feature.Aggregate(others), sample, flags)
+		values = append(values, summarizeDrifts(drifts).meanZ)
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+
+	return &SelfSimilarityStats{
+		MeanZ:       values,
+		MeanZMedian: median(sorted),
+		MeanZSpread: populationStdDev(values),
+		MeanZMin:    sorted[0],
+		MeanZMax:    sorted[len(sorted)-1],
+	}
+}
+
+func median(sorted []float64) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[mid]
+	}
+	return (sorted[mid-1] + sorted[mid]) / 2
+}
+
+func populationStdDev(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	mean := 0.0
+	for _, value := range values {
+		mean += value
+	}
+	mean /= float64(len(values))
+	variance := 0.0
+	for _, value := range values {
+		diff := value - mean
+		variance += diff * diff
+	}
+	return math.Sqrt(variance / float64(len(values)))
 }
 
 // meanOf reduces a running z-score sum to its mean, returning zero for an empty

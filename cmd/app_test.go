@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nao1215/omokage/internal/storage"
 )
 
 func TestAppLifecycle(t *testing.T) {
@@ -113,7 +115,7 @@ func TestCheckExplainTextOutput(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("check --explain failed: stderr=%q", stderr)
 	}
-	for _, want := range []string{"Author: me", "Similarity:", "High-level style", "σ)"} {
+	for _, want := range []string{"Author: me", "Similarity:", "Score driver:", "Scoring note:", "High-level style", "σ)"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("explain output missing %q:\n%s", want, stdout)
 		}
@@ -135,6 +137,8 @@ func TestCheckJSONOutput(t *testing.T) {
 	var payload struct {
 		Author     string `json:"author"`
 		Similarity int    `json:"similarity"`
+		Driver     string `json:"score_driver"`
+		Note       string `json:"score_note"`
 		HighLevel  []struct {
 			Feature       string  `json:"feature"`
 			Category      string  `json:"category"`
@@ -163,6 +167,12 @@ func TestCheckJSONOutput(t *testing.T) {
 	if payload.Similarity < 0 || payload.Similarity > 100 {
 		t.Fatalf("similarity out of range: %d", payload.Similarity)
 	}
+	if payload.Driver == "" {
+		t.Fatal("expected score_driver in JSON output")
+	}
+	if payload.Note == "" {
+		t.Fatal("expected score_note in JSON output")
+	}
 	if len(payload.HighLevel) == 0 {
 		t.Fatal("expected high-level drift entries in JSON output")
 	}
@@ -181,6 +191,25 @@ func TestCheckJSONOutput(t *testing.T) {
 	}
 	if payload.Segments[0].Feature != "polite sentence-ending ratio" {
 		t.Fatalf("expected register drift to lead the localization, got %q", payload.Segments[0].Feature)
+	}
+}
+
+func TestTrainStoresSelfSimilarityStats(t *testing.T) {
+	t.Parallel()
+
+	workDir := trainedProject(t)
+	record, err := storage.LoadProfile(filepath.Join(workDir, "profiles", "me.db"))
+	if err != nil {
+		t.Fatalf("load profile: %v", err)
+	}
+	if record.SelfSimilarity == nil {
+		t.Fatal("expected self-similarity stats to be stored at train time")
+	}
+	if len(record.SelfSimilarity.MeanZ) != 3 {
+		t.Fatalf("expected 3 leave-one-out samples, got %d", len(record.SelfSimilarity.MeanZ))
+	}
+	if record.SelfSimilarity.MeanZMedian <= 0 {
+		t.Fatalf("expected a positive leave-one-out median, got %f", record.SelfSimilarity.MeanZMedian)
 	}
 }
 
