@@ -516,6 +516,7 @@ func (a *App) runCheck(args []string) int {
 		return 1
 	}
 	a.warnFeatureVersion(record)
+	a.warnSelfSimilarityCalibration(record)
 
 	targetPath, err := resolvePath(a.workDir, flagSet.Arg(0))
 	if err != nil {
@@ -529,8 +530,7 @@ func (a *App) runCheck(args []string) int {
 			writeLine(a.stderr, err)
 			return 1
 		}
-		comparison := profile.Score(record.Distribution, targetMetrics, scope.Config.Features)
-		comparison.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
+		comparison := profile.ScoreRecord(record, targetMetrics, scope.Config.Features)
 		writef(a.stdout, "%d\n", comparison.Similarity)
 		return 0
 	}
@@ -545,8 +545,7 @@ func (a *App) runCheck(args []string) int {
 			writeLine(a.stderr, err)
 			return 1
 		}
-		comparison := profile.Score(record.Distribution, targetMetrics, scope.Config.Features)
-		comparison.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
+		comparison := profile.ScoreRecord(record, targetMetrics, scope.Config.Features)
 		renderComparison(a.stdout, renderOptions{
 			author:     record.Author,
 			comparison: comparison,
@@ -567,8 +566,7 @@ func (a *App) runCheck(args []string) int {
 		writeLine(a.stderr, err)
 		return 1
 	}
-	explanation := profile.Explain(record.Distribution, targetMetrics, segments, scope.Config.Features)
-	explanation.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
+	explanation := profile.ExplainRecord(record, targetMetrics, segments, scope.Config.Features)
 	if *format == formatJSON {
 		// Term warnings are a separate layer from the similarity score: they report
 		// where the draft used a non-preferred surface, and never alter the score.
@@ -600,6 +598,14 @@ func (a *App) warnFeatureVersion(record profile.Record) {
 		writef(a.stderr, "warning: profile %q was trained with an older feature set (v%d, this build uses v%d); scores may be off until you retrain it with 'omokage train'.\n",
 			record.Author, record.FeatureVersion, feature.Version)
 	}
+}
+
+func (a *App) warnSelfSimilarityCalibration(record profile.Record) {
+	if record.SelfSimilarity != nil {
+		return
+	}
+	writef(a.stderr, "warning: profile %q has no self-similarity calibration; retrain it with the current omokage to improve score calibration (two or more usable documents are required).\n",
+		record.Author)
 }
 
 func (a *App) runDiff(args []string) int {

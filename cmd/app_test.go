@@ -225,6 +225,32 @@ func TestTrainStoresSelfSimilarityStats(t *testing.T) {
 	}
 }
 
+func TestCheckWarnsWhenCalibrationMissing(t *testing.T) {
+	t.Parallel()
+
+	workDir := trainedProject(t)
+	profilePath := filepath.Join(workDir, "profiles", "me.db")
+	record, err := storage.LoadProfile(profilePath)
+	if err != nil {
+		t.Fatalf("load profile: %v", err)
+	}
+	record.SelfSimilarity = nil
+	if err := storage.SaveProfile(profilePath, record); err != nil {
+		t.Fatalf("save profile without calibration: %v", err)
+	}
+
+	writeTestFile(t, filepath.Join(workDir, "draft.txt"),
+		"今日はとても良い天気です。散歩に出かけました。気持ちが良かったです。")
+
+	code, _, stderr := runApp(t, workDir, "check", "--author", "me", "draft.txt")
+	if code != 0 {
+		t.Fatalf("check failed: %s", stderr)
+	}
+	if !strings.Contains(stderr, "no self-similarity calibration") {
+		t.Fatalf("expected missing-calibration warning, got stderr=%q", stderr)
+	}
+}
+
 func TestCheckPlainOutputStaysClean(t *testing.T) {
 	t.Parallel()
 

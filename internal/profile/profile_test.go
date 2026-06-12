@@ -154,6 +154,74 @@ func TestScoreRejectsCrossLanguageText(t *testing.T) {
 	}
 }
 
+func TestScoreRecordFallsBackWithoutCalibration(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+	}
+	dist := distributionFromTexts(polite)
+	target := feature.ExtractText("今日は良い天気です。散歩に出かけました。とても気持ちが良かったです。")
+
+	legacy := Score(dist, target, flags)
+	record := Record{Distribution: dist}
+	calibrated := ScoreRecord(record, target, flags)
+	if calibrated.Similarity != legacy.Similarity {
+		t.Fatalf("expected legacy fallback without calibration: legacy=%d calibrated=%d",
+			legacy.Similarity, calibrated.Similarity)
+	}
+}
+
+func TestScoreRecordCalibratesSelfSimilarity(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	texts := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+		"先週は仕事が忙しかったです。それでも毎日きちんと休めました。",
+	}
+	perDoc := make([]feature.Metrics, 0, len(texts))
+	for _, text := range texts {
+		perDoc = append(perDoc, feature.ExtractText(text))
+	}
+	record := Record{
+		Distribution:   feature.Aggregate(perDoc),
+		SelfSimilarity: ComputeSelfSimilarityStats(perDoc, flags),
+	}
+
+	own := feature.ExtractText("今日は朝から少し雨が降っています。傘を持って出かけました。空気が冷たくて静かでした。")
+	other := feature.ExtractText("きょうもサッカーをしたよ。仲間と思いきり走ったんだ。最高に楽しい一日だったなあ。")
+
+	legacyOwn := Score(record.Distribution, own, flags)
+	calibratedOwn := ScoreRecord(record, own, flags)
+	calibratedOther := ScoreRecord(record, other, flags)
+
+	if calibratedOwn.SelfSimilarity == nil || calibratedOwn.SelfSimilarity.Median != calibratedMedianScore {
+		t.Fatalf("expected calibrated self-similarity anchor at %d, got %+v",
+			calibratedMedianScore, calibratedOwn.SelfSimilarity)
+	}
+	if calibratedOwn.Similarity <= legacyOwn.Similarity {
+		t.Fatalf("expected calibration to lift own-text scores: legacy=%d calibrated=%d",
+			legacyOwn.Similarity, calibratedOwn.Similarity)
+	}
+	if calibratedOwn.Similarity < 85 {
+		t.Fatalf("expected own-text score to move near the calibrated anchor, got %d", calibratedOwn.Similarity)
+	}
+	if calibratedOther.Similarity >= calibratedOwn.Similarity {
+		t.Fatalf("expected other author to remain below own text: own=%d other=%d",
+			calibratedOwn.Similarity, calibratedOther.Similarity)
+	}
+	if calibratedOther.Similarity >= 50 {
+		t.Fatalf("expected other author to stay clearly low after calibration, got %d", calibratedOther.Similarity)
+	}
+}
+
 func TestScoreSeparatesLexicalFingerprint(t *testing.T) {
 	t.Parallel()
 
@@ -189,6 +257,33 @@ func TestExplainMatchesScoreSimilarity(t *testing.T) {
 	explanation := Explain(dist, target, nil, flags)
 	if explanation.Similarity != score.Similarity {
 		t.Fatalf("Explain similarity %d should match Score similarity %d",
+			explanation.Similarity, score.Similarity)
+	}
+}
+
+func TestExplainRecordMatchesScoreRecordSimilarity(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	texts := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+	}
+	perDoc := make([]feature.Metrics, 0, len(texts))
+	for _, text := range texts {
+		perDoc = append(perDoc, feature.ExtractText(text))
+	}
+	record := Record{
+		Distribution:   feature.Aggregate(perDoc),
+		SelfSimilarity: ComputeSelfSimilarityStats(perDoc, flags),
+	}
+	target := feature.ExtractText("今日は良い天気です。散歩に出かけました。とても気持ちが良かったです。")
+
+	score := ScoreRecord(record, target, flags)
+	explanation := ExplainRecord(record, target, nil, flags)
+	if explanation.Similarity != score.Similarity {
+		t.Fatalf("ExplainRecord similarity %d should match ScoreRecord similarity %d",
 			explanation.Similarity, score.Similarity)
 	}
 }
