@@ -115,7 +115,7 @@ func TestCheckExplainTextOutput(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("check --explain failed: stderr=%q", stderr)
 	}
-	for _, want := range []string{"Author: me", "Similarity:", "Score driver:", "Scoring note:", "High-level style", "σ)"} {
+	for _, want := range []string{"Author: me", "Similarity:", "self-similarity median", "Score driver:", "Scoring note:", "High-level style", "σ)"} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("explain output missing %q:\n%s", want, stdout)
 		}
@@ -137,6 +137,12 @@ func TestCheckJSONOutput(t *testing.T) {
 	var payload struct {
 		Author     string `json:"author"`
 		Similarity int    `json:"similarity"`
+		Anchor     *struct {
+			Median  int `json:"median"`
+			Low     int `json:"low"`
+			High    int `json:"high"`
+			Samples int `json:"samples"`
+		} `json:"self_similarity_anchor"`
 		Driver     string `json:"score_driver"`
 		Note       string `json:"score_note"`
 		HighLevel  []struct {
@@ -166,6 +172,12 @@ func TestCheckJSONOutput(t *testing.T) {
 	}
 	if payload.Similarity < 0 || payload.Similarity > 100 {
 		t.Fatalf("similarity out of range: %d", payload.Similarity)
+	}
+	if payload.Anchor == nil {
+		t.Fatal("expected self_similarity_anchor in JSON output")
+	}
+	if payload.Anchor.Median <= 0 || payload.Anchor.Samples != 3 {
+		t.Fatalf("unexpected self_similarity_anchor: %+v", payload.Anchor)
 	}
 	if payload.Driver == "" {
 		t.Fatal("expected score_driver in JSON output")
@@ -226,6 +238,9 @@ func TestCheckPlainOutputStaysClean(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Similarity:") {
 		t.Fatalf("plain check stdout missing the score: %q", stdout)
+	}
+	if !strings.Contains(stdout, "self-similarity median") {
+		t.Fatalf("plain check stdout should include the self-similarity anchor: %q", stdout)
 	}
 	// The output is captured (not a terminal), so the discoverability tip must be
 	// suppressed on both streams: a pipe, a redirect, a $(...) capture, or an LLM

@@ -53,9 +53,20 @@ type SelfSimilarityStats struct {
 	MeanZMax    float64
 }
 
+// SimilarityAnchor is the human-facing summary of the author's own
+// leave-one-out self-similarity band, expressed in the same 0-100 scale check
+// prints. Low/High are the observed range of self-similarity scores.
+type SimilarityAnchor struct {
+	Median  int
+	Low     int
+	High    int
+	Samples int
+}
+
 type Comparison struct {
-	Similarity  int
-	Differences []string
+	Similarity     int
+	Differences    []string
+	SelfSimilarity *SimilarityAnchor
 }
 
 // zScoreScale maps the mean absolute z-score to a similarity percentage: a
@@ -187,11 +198,12 @@ type SegmentDrift struct {
 // (high-level first, then the capped low-level fingerprint) and Segments points
 // at the paragraphs that drift most.
 type Explanation struct {
-	Similarity  int
-	Drifts      []FeatureDrift
-	Segments    []SegmentDrift
-	ScoreDriver string
-	ScoreNote   string
+	Similarity     int
+	Drifts         []FeatureDrift
+	Segments       []SegmentDrift
+	ScoreDriver    string
+	ScoreNote      string
+	SelfSimilarity *SimilarityAnchor
 }
 
 // lowLevelExplainLimit caps how many low-level fingerprint drifts the explanation
@@ -408,7 +420,11 @@ func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 }
 
 func similarityFromBreakdown(b driftBreakdown) int {
-	return clampPercent(int(math.Round((1 - b.meanZ/zScoreScale) * 100)))
+	return similarityFromMeanZ(b.meanZ)
+}
+
+func similarityFromMeanZ(meanZ float64) int {
+	return clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
 }
 
 // topDifferences renders the default `check` output: the three highest-z drifts
@@ -922,6 +938,23 @@ func ComputeSelfSimilarityStats(samples []feature.Metrics, flags config.Features
 		MeanZSpread: populationStdDev(values),
 		MeanZMin:    sorted[0],
 		MeanZMax:    sorted[len(sorted)-1],
+	}
+}
+
+func SelfSimilarityAnchorForStats(stats *SelfSimilarityStats) *SimilarityAnchor {
+	if stats == nil || len(stats.MeanZ) == 0 {
+		return nil
+	}
+	low := similarityFromMeanZ(stats.MeanZMax)
+	high := similarityFromMeanZ(stats.MeanZMin)
+	if low > high {
+		low, high = high, low
+	}
+	return &SimilarityAnchor{
+		Median:  similarityFromMeanZ(stats.MeanZMedian),
+		Low:     low,
+		High:    high,
+		Samples: len(stats.MeanZ),
 	}
 }
 
