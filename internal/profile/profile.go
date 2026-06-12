@@ -206,6 +206,13 @@ type Explanation struct {
 	SelfSimilarity *SimilarityAnchor
 }
 
+const (
+	calibratedMedianScore = 90
+	calibratedUpperScore  = 75
+	calibrationMedianFloor = 0.1
+	calibrationSpreadFloor = 0.05
+)
+
 // lowLevelExplainLimit caps how many low-level fingerprint drifts the explanation
 // reports. The full set runs to hundreds of n-grams; surfacing the top few keeps
 // the report readable while still flagging the strongest fingerprint movement.
@@ -245,6 +252,14 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 	}
 }
 
+// ScoreRecord is the check-time scoring path: it uses the profile's
+// self-similarity baseline when present, falling back to the legacy fixed scale
+// for old or under-specified profiles.
+func ScoreRecord(record Record, target feature.Metrics, flags config.Features) Comparison {
+	drifts := featureDrifts(record.Distribution, target, flags)
+	return comparisonFromDrifts(drifts, record.SelfSimilarity)
+}
+
 // Explain produces the rich, editor-facing view of the same comparison Score
 // makes. It reuses the identical per-feature z-scores (so the headline similarity
 // matches Score exactly), then prioritizes them for editing and, when segments
@@ -262,6 +277,26 @@ func Explain(reference feature.Distribution, target feature.Metrics, segments []
 		Segments:    locateSegmentDrift(reference, segments, flags),
 		ScoreDriver: breakdown.driver(),
 		ScoreNote:   explanationScoreNote,
+	}
+}
+
+// ExplainRecord mirrors ScoreRecord for the detailed explain path so the
+// headline similarity and the self-similarity anchor use the same calibrated
+// mapping as plain check.
+func ExplainRecord(record Record, target feature.Metrics, segments []feature.Segment, flags config.Features) Explanation {
+	drifts := featureDrifts(record.Distribution, target, flags)
+	breakdown := summarizeDrifts(drifts)
+	similarity := 100
+	if len(drifts) > 0 {
+		similarity = calibratedSimilarityFromMeanZ(breakdown.meanZ, record.SelfSimilarity)
+	}
+	return Explanation{
+		Similarity:     similarity,
+		Drifts:         prioritize(drifts),
+		Segments:       locateSegmentDrift(record.Distribution, segments, flags),
+		ScoreDriver:    breakdown.driver(),
+		ScoreNote:      explanationScoreNote,
+		SelfSimilarity: calibratedSelfSimilarityAnchor(record.SelfSimilarity),
 	}
 }
 
@@ -420,11 +455,49 @@ func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 }
 
 func similarityFromBreakdown(b driftBreakdown) int {
-	return similarityFromMeanZ(b.meanZ)
+	return legacySimilarityFromMeanZ(b.meanZ)
 }
 
-func similarityFromMeanZ(meanZ float64) int {
+func legacySimilarityFromMeanZ(meanZ float64) int {
 	return clampPercent(int(math.Round((1 - meanZ/zScoreScale) * 100)))
+}
+
+func calibratedSimilarityFromMeanZ(meanZ float64, stats *SelfSimilarityStats) int {
+	if stats == nil || len(stats.MeanZ) == 0 {
+		return legacySimilarityFromMeanZ(meanZ)
+	}
+	median := math.Max(stats.MeanZMedian, calibrationMedianFloor)
+	spread := math.Max(stats.MeanZSpread, calibrationSpreadFloor)
+	upper := math.Max(stats.MeanZMax, median+spread)
+	width := math.Max(upper-median, calibrationSpreadFloor)
+	tailWidth := math.Max(spread*0.75, calibrationSpreadFloor)
+
+	if meanZ <= median {
+		ratio := meanZ / median
+		return clampPercent(int(math.Round(100 - ratio*(100-calibratedMedianScore))))
+	}
+	if meanZ <= upper {
+		ratio := (meanZ - median) / width
+		return clampPercent(int(math.Round(calibratedMedianScore - ratio*(calibratedMedianScore-calibratedUpperScore))))
+	}
+	ratio := (meanZ - upper) / tailWidth
+	return clampPercent(int(math.Round(calibratedUpperScore - ratio*calibratedUpperScore)))
+}
+
+func comparisonFromDrifts(drifts []FeatureDrift, stats *SelfSimilarityStats) Comparison {
+	if len(drifts) == 0 {
+		return Comparison{
+			Similarity:     100,
+			Differences:    []string{"no enabled features configured"},
+			SelfSimilarity: calibratedSelfSimilarityAnchor(stats),
+		}
+	}
+	breakdown := summarizeDrifts(drifts)
+	return Comparison{
+		Similarity:     calibratedSimilarityFromMeanZ(breakdown.meanZ, stats),
+		Differences:    topDifferences(drifts),
+		SelfSimilarity: calibratedSelfSimilarityAnchor(stats),
+	}
 }
 
 // topDifferences renders the default `check` output: the three highest-z drifts
@@ -955,16 +1028,26 @@ func ComputeSelfSimilarityStats(samples []feature.Metrics, flags config.Features
 }
 
 func SelfSimilarityAnchorForStats(stats *SelfSimilarityStats) *SimilarityAnchor {
+	return selfSimilarityAnchorForStats(stats, legacySimilarityFromMeanZ)
+}
+
+func calibratedSelfSimilarityAnchor(stats *SelfSimilarityStats) *SimilarityAnchor {
+	return selfSimilarityAnchorForStats(stats, func(meanZ float64) int {
+		return calibratedSimilarityFromMeanZ(meanZ, stats)
+	})
+}
+
+func selfSimilarityAnchorForStats(stats *SelfSimilarityStats, mapper func(float64) int) *SimilarityAnchor {
 	if stats == nil || len(stats.MeanZ) == 0 {
 		return nil
 	}
-	low := similarityFromMeanZ(stats.MeanZMax)
-	high := similarityFromMeanZ(stats.MeanZMin)
+	low := mapper(stats.MeanZMax)
+	high := mapper(stats.MeanZMin)
 	if low > high {
 		low, high = high, low
 	}
 	return &SimilarityAnchor{
-		Median:  similarityFromMeanZ(stats.MeanZMedian),
+		Median:  mapper(stats.MeanZMedian),
 		Low:     low,
 		High:    high,
 		Samples: len(stats.MeanZ),
