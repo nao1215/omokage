@@ -391,8 +391,9 @@ func featureDrifts(reference feature.Distribution, target feature.Metrics, flags
 // similarityFromDrifts reduces per-feature drifts to the same similarity Score
 // has always produced: each group's mean z is fed to combineDrift, which keeps
 // the lexical fingerprint leading, charges register only for its excess, and lets
-// the structural remainder nudge. Reconstructing the group means from the drift
-// list keeps a single source of truth instead of duplicating the accumulation.
+// the structural remainder nudge. Presence is tracked by active feature count,
+// not by value>0, so an exact-match sub-signal (z=0) still participates in the
+// lexical mean instead of being misread as absent.
 func similarityFromDrifts(drifts []FeatureDrift) int {
 	return similarityFromBreakdown(summarizeDrifts(drifts))
 }
@@ -450,7 +451,7 @@ func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 	breakdown.lexicalTerm = lexicalGroupMean(groups, breakdown.counts)
 	breakdown.registerTerm = registerWeight * registerPenalty(groups.register)
 	breakdown.otherTerm = otherStructWeight * groups.other
-	breakdown.meanZ = combineDrift(groups)
+	breakdown.meanZ = combineDriftWithCounts(groups, breakdown.counts)
 	return breakdown
 }
 
@@ -791,12 +792,18 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 	// Combine the groups the same way Score does so the diff stays consistent with
 	// check: averaging within each group first keeps the many character n-grams
 	// from drowning out a register difference between the two documents.
-	drift := combineCompareDrift(groupDrift{
+	counts := groupCounts{
+		register:     registerCount,
+		other:        otherCount,
+		functionWord: functionWordCount,
+		ngram:        ngramCount,
+	}
+	drift := combineCompareDriftWithCounts(groupDrift{
 		register:     meanOf(registerDist, registerCount),
 		other:        meanOf(otherDist, otherCount),
 		functionWord: meanOf(functionWordDist, functionWordCount),
 		ngram:        meanOf(ngramDist, ngramCount),
-	})
+	}, counts)
 	similarity := clampPercent(int(math.Round((1 - drift) * 100)))
 
 	sort.SliceStable(results, func(i int, j int) bool {
@@ -894,10 +901,14 @@ const explanationScoreNote = "This score is computed from the full fingerprint a
 // resolution between a near-match with the wrong register and a wholly different
 // author. The noisy structural remainder only nudges the result.
 func combineDrift(g groupDrift) float64 {
-	lexical := lexicalGroupMean(g, groupCounts{
+	return combineDriftWithCounts(g, groupCounts{
 		functionWord: boolCount(g.functionWord != 0),
 		ngram:        boolCount(g.ngram != 0),
 	})
+}
+
+func combineDriftWithCounts(g groupDrift, counts groupCounts) float64 {
+	lexical := lexicalGroupMean(g, counts)
 	return lexical + registerWeight*registerPenalty(g.register) + otherStructWeight*g.other
 }
 
@@ -920,25 +931,32 @@ const (
 // n-gram distances), a register difference is added with a fixed weight, and the
 // remaining structural features contribute a moderate share.
 func combineCompareDrift(g groupDrift) float64 {
-	lexical := lexicalGroupMean(g, groupCounts{
+	return combineCompareDriftWithCounts(g, groupCounts{
 		functionWord: boolCount(g.functionWord != 0),
 		ngram:        boolCount(g.ngram != 0),
 	})
+}
+
+func combineCompareDriftWithCounts(g groupDrift, counts groupCounts) float64 {
+	lexical := lexicalGroupMean(g, counts)
 	return lexical + registerCompareWeight*g.register + otherCompareWeight*g.other
 }
 
 func lexicalGroupMean(g groupDrift, counts groupCounts) float64 {
-	return meanOfPresent(
-		weightedGroupValue(g.functionWord, counts.functionWord),
-		weightedGroupValue(g.ngram, counts.ngram),
-	)
-}
-
-func weightedGroupValue(value float64, count int) float64 {
-	if count == 0 {
+	sum := 0.0
+	active := 0
+	if counts.functionWord > 0 {
+		sum += g.functionWord
+		active++
+	}
+	if counts.ngram > 0 {
+		sum += g.ngram
+		active++
+	}
+	if active == 0 {
 		return 0
 	}
-	return value
+	return sum / float64(active)
 }
 
 func registerExcess(register float64) float64 {
@@ -979,25 +997,6 @@ func (b driftBreakdown) driver() string {
 		return ""
 	}
 	return driver
-}
-
-// meanOfPresent averages the sub-signals that are actually present. A sub-signal
-// of zero means its group had no active features (e.g. the function-word group
-// for a target sharing no vocabulary, or either group when disabled), so it is
-// excluded from the average rather than dragging it toward zero.
-func meanOfPresent(values ...float64) float64 {
-	sum := 0.0
-	count := 0
-	for _, value := range values {
-		if value > 0 {
-			sum += value
-			count++
-		}
-	}
-	if count == 0 {
-		return 0
-	}
-	return sum / float64(count)
 }
 
 // ComputeSelfSimilarityStats measures, for each training document, the mean z
