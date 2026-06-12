@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -62,6 +63,74 @@ func TestScoreDetectsRegisterShift(t *testing.T) {
 	if plainScore.Similarity >= politeScore.Similarity {
 		t.Fatalf("expected a register shift to lower similarity: polite=%d plain=%d",
 			politeScore.Similarity, plainScore.Similarity)
+	}
+}
+
+func TestRegisterPenaltySaturates(t *testing.T) {
+	t.Parallel()
+
+	values := []float64{
+		registerPenalty(3),
+		registerPenalty(5),
+		registerPenalty(10),
+		registerPenalty(50),
+	}
+	for i := 1; i < len(values); i++ {
+		if values[i] < values[i-1] {
+			t.Fatalf("register penalty should be monotonic: %#v", values)
+		}
+	}
+	if values[len(values)-1] > registerSaturation {
+		t.Fatalf("register penalty should stay within the saturation cap %.2f, got %.6f",
+			registerSaturation, values[len(values)-1])
+	}
+	if math.Abs(values[len(values)-1]-values[len(values)-2]) > 0.1 {
+		t.Fatalf("register penalty should flatten out by large z, got %#v", values)
+	}
+}
+
+func TestRegisterPenaltyLeavesToleranceRegionUntouched(t *testing.T) {
+	t.Parallel()
+
+	got := combineDrift(groupDrift{
+		register:     registerTolerance,
+		functionWord: 0.6,
+		ngram:        0.4,
+		other:        1.0,
+	})
+	want := 0.5 + otherStructWeight*1.0
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("register within tolerance should add nothing: got=%f want=%f", got, want)
+	}
+}
+
+func TestRegisterFlipRetainsLexicalResolution(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+		"先週は仕事が忙しかったです。それでも毎日きちんと休めました。",
+	}
+	dist := distributionFromTexts(polite)
+
+	// Same lexical fingerprint and structure as the profile mean, but with a full
+	// register flip. This used to collapse to 0% together with a genuinely
+	// different author because the register excess was unbounded.
+	registerFlip := dist.Mean
+	registerFlip.PoliteEndingRatio = 0
+	registerFlip.PlainEndingRatio = 1
+
+	otherAuthor := feature.ExtractText("本日は降雨である。会議資料を作成した。結論を整理し、対応を決定した。")
+
+	near := Score(dist, registerFlip, flags)
+	far := Score(dist, otherAuthor, flags)
+	if near.Similarity <= far.Similarity {
+		t.Fatalf("register-flipped near match should outscore a different author: near=%d far=%d",
+			near.Similarity, far.Similarity)
 	}
 }
 

@@ -413,7 +413,7 @@ func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 		},
 	}
 	breakdown.lexicalTerm = lexicalGroupMean(groups, breakdown.counts)
-	breakdown.registerTerm = registerWeight * registerExcess(groups.register)
+	breakdown.registerTerm = registerWeight * registerPenalty(groups.register)
 	breakdown.otherTerm = otherStructWeight * groups.other
 	breakdown.meanZ = combineDrift(groups)
 	return breakdown
@@ -784,6 +784,11 @@ var registerLabels = map[string]bool{
 const (
 	registerWeight    = 1.0
 	otherStructWeight = 0.05
+	// registerSaturation caps the register penalty once the drift is already
+	// clearly far outside the author's normal range. This prevents the ratio-floor
+	// artifact from collapsing both "register flipped but otherwise identical" and
+	// "wholly different author" to the same 0% score.
+	registerSaturation = 2.0
 	// registerTolerance is the register z-score an author may reach through their
 	// own variation (e.g. nao writes mostly 敬体 but slips into 常体 in some posts)
 	// before it counts as a register shift. Only the excess above this hinge is
@@ -812,15 +817,15 @@ const explanationScoreNote = "This score is computed from the full fingerprint a
 // the equal-weight mean of the function-word and character-n-gram sub-signals so
 // that neither the ~150 function words nor the ~400 n-grams dominate by sheer
 // count. The register group is added only for its excess above registerTolerance,
-// so an author's own mild register variation is ignored while a wholesale
-// register flip (an LLM imitation, cross-language text) is charged sharply. The
-// noisy structural remainder only nudges the result.
+// but that excess saturates once it is clearly "far enough", restoring
+// resolution between a near-match with the wrong register and a wholly different
+// author. The noisy structural remainder only nudges the result.
 func combineDrift(g groupDrift) float64 {
 	lexical := lexicalGroupMean(g, groupCounts{
 		functionWord: boolCount(g.functionWord != 0),
 		ngram:        boolCount(g.ngram != 0),
 	})
-	return lexical + registerWeight*registerExcess(g.register) + otherStructWeight*g.other
+	return lexical + registerWeight*registerPenalty(g.register) + otherStructWeight*g.other
 }
 
 // registerCompareWeight is how much a register difference between two documents
@@ -869,6 +874,14 @@ func registerExcess(register float64) float64 {
 		return 0
 	}
 	return excess
+}
+
+func registerPenalty(register float64) float64 {
+	excess := registerExcess(register)
+	if excess == 0 {
+		return 0
+	}
+	return registerSaturation * math.Tanh(excess/registerSaturation)
 }
 
 func boolCount(ok bool) int {
