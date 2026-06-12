@@ -134,6 +134,49 @@ func TestRegisterFlipRetainsLexicalResolution(t *testing.T) {
 	}
 }
 
+func TestExactLexicalMatchBeatsTinyLexicalDrift(t *testing.T) {
+	t.Parallel()
+
+	exact := []FeatureDrift{
+		{Category: categoryFunctionWord, Z: 0},
+		{Category: categoryCharNgram, Z: 2},
+	}
+	epsilon := []FeatureDrift{
+		{Category: categoryFunctionWord, Z: 0.1},
+		{Category: categoryCharNgram, Z: 2},
+	}
+
+	exactBreakdown := summarizeDrifts(exact)
+	epsilonBreakdown := summarizeDrifts(epsilon)
+	if math.Abs(exactBreakdown.lexicalTerm-1.0) > 1e-9 {
+		t.Fatalf("expected exact lexical match to average with the active n-gram group, got %f", exactBreakdown.lexicalTerm)
+	}
+	if exactBreakdown.meanZ >= epsilonBreakdown.meanZ {
+		t.Fatalf("expected exact lexical match to produce a lower mean z: exact=%f epsilon=%f",
+			exactBreakdown.meanZ, epsilonBreakdown.meanZ)
+	}
+	if similarityFromDrifts(exact) <= similarityFromDrifts(epsilon) {
+		t.Fatalf("expected an exact lexical match to score better than a tiny drift: exact=%d epsilon=%d",
+			similarityFromDrifts(exact), similarityFromDrifts(epsilon))
+	}
+}
+
+func TestCompareCountsExactLexicalMatchesAsPresent(t *testing.T) {
+	t.Parallel()
+
+	got := combineCompareDriftWithCounts(groupDrift{
+		functionWord: 0,
+		ngram:        0.4,
+	}, groupCounts{
+		functionWord: 1,
+		ngram:        1,
+	})
+	want := 0.2
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("expected exact function-word match to stay in the lexical mean: got=%f want=%f", got, want)
+	}
+}
+
 func TestScoreRejectsCrossLanguageText(t *testing.T) {
 	t.Parallel()
 
