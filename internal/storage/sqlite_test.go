@@ -18,6 +18,13 @@ func TestSaveLoadProfile(t *testing.T) {
 		SourceDir: "/tmp/corpus",
 		TrainedAt: time.Date(2026, time.June, 1, 12, 0, 0, 0, time.UTC),
 		FileCount: 3,
+		SelfSimilarity: &profile.SelfSimilarityStats{
+			MeanZ:       []float64{0.4, 0.6, 0.8},
+			MeanZMedian: 0.6,
+			MeanZSpread: 0.1632993161855452,
+			MeanZMin:    0.4,
+			MeanZMax:    0.8,
+		},
 		Distribution: feature.Distribution{
 			Mean: feature.Metrics{
 				AverageSentenceLength:    12,
@@ -103,6 +110,15 @@ func TestSaveLoadProfile(t *testing.T) {
 	}
 	if got := actual.Distribution.StdDev.CharNgrams["です"]; got != 0.002 {
 		t.Fatalf("std char n-gram mismatch: got=%f want=%f", got, 0.002)
+	}
+	if actual.SelfSimilarity == nil {
+		t.Fatal("expected self-similarity stats to round-trip")
+	}
+	if actual.SelfSimilarity.MeanZMedian != expected.SelfSimilarity.MeanZMedian {
+		t.Fatalf("self-similarity median mismatch: got=%f want=%f", actual.SelfSimilarity.MeanZMedian, expected.SelfSimilarity.MeanZMedian)
+	}
+	if len(actual.SelfSimilarity.MeanZ) != len(expected.SelfSimilarity.MeanZ) {
+		t.Fatalf("self-similarity sample count mismatch: got=%d want=%d", len(actual.SelfSimilarity.MeanZ), len(expected.SelfSimilarity.MeanZ))
 	}
 }
 

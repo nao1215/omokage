@@ -20,6 +20,12 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 		writef(w, "Author: %s\n", author)
 	}
 	writef(w, "Similarity: %d%%\n", explanation.Similarity)
+	if explanation.ScoreDriver != "" {
+		writef(w, "Score driver: %s\n", explanation.ScoreDriver)
+	}
+	if explanation.ScoreNote != "" {
+		writef(w, "Scoring note: %s\n", explanation.ScoreNote)
+	}
 
 	high, low := splitDrifts(explanation.Drifts)
 
@@ -72,6 +78,8 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 	payload := explanationJSON{
 		Author:         author,
 		Similarity:     explanation.Similarity,
+		ScoreDriver:    explanation.ScoreDriver,
+		ScoreNote:      explanation.ScoreNote,
 		HighLevelDrift: toDriftJSON(high),
 		LowLevelDrift:  toDriftJSON(low),
 		Segments:       toSegmentJSON(explanation.Segments),
@@ -85,6 +93,8 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 type explanationJSON struct {
 	Author         string             `json:"author"`
 	Similarity     int                `json:"similarity"`
+	ScoreDriver    string             `json:"score_driver,omitempty"`
+	ScoreNote      string             `json:"score_note,omitempty"`
 	HighLevelDrift []featureDriftJSON `json:"high_level_drift"`
 	LowLevelDrift  []featureDriftJSON `json:"low_level_drift"`
 	Segments       []segmentJSON      `json:"segments"`
