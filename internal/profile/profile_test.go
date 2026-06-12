@@ -104,6 +104,17 @@ func TestRegisterPenaltyLeavesToleranceRegionUntouched(t *testing.T) {
 	}
 }
 
+func TestRegisterToleranceAllowsMildVariation(t *testing.T) {
+	t.Parallel()
+
+	if registerPenalty(2.9) != 0 {
+		t.Fatalf("mild register wobble should stay inside tolerance, got penalty %f", registerPenalty(2.9))
+	}
+	if registerPenalty(3.1) <= 0 {
+		t.Fatalf("register drift above tolerance should be charged, got %f", registerPenalty(3.1))
+	}
+}
+
 func TestRegisterFlipRetainsLexicalResolution(t *testing.T) {
 	t.Parallel()
 
