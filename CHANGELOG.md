@@ -7,6 +7,30 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Added
+
+- Training now records a leave-one-out self-similarity baseline per profile.
+  `check` and `check --explain` show that baseline as a self-similarity anchor,
+  so a user can read a score against the author's own typical range rather than
+  against a fixed global scale.
+
+### Changed
+
+- `check` now maps drift to similarity through the profile's own self-similarity
+  baseline when that data is present, anchoring the median self-similar document
+  near 90 and preserving a visible "own range" in the output. Older profiles
+  still work through the previous fixed-scale path, but warn until retrained.
+- Register drift now saturates instead of adding without bound, so a register flip
+  no longer collapses both "otherwise near match" and "wholly different author"
+  to the same 0% score.
+- Grouped lexical drift now distinguishes "group absent" from "group active with
+  exact match", fixing the case where a perfect function-word match could score
+  slightly worse than a tiny mismatch.
+- The register tolerance was widened slightly after the saturation change so an
+  author's mild register wobble is less likely to be over-penalized.
+- The README examples and scoring explanation now reflect the calibrated score
+  output and the self-similarity anchor.
+
 ## [0.4.0] - 2026-06-11
 
 ### Changed

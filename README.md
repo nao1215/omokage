@@ -16,8 +16,8 @@ omokage learns how you write from your past writing, then scores how close a new
 
 ## What it does (and doesn't)
 
-- **Does**: compare *style* — sentence shape, register (敬体 / 常体), kanji/kana balance, word and character patterns — between a draft and a trained author, and point out where they differ.
-- **Doesn't**: judge meaning, correctness, originality, or quality. It is not an AI-text detector. A high score means "this reads like the voice you trained," nothing more.
+- Compares style — sentence shape, register (敬体 / 常体), kanji/kana balance, word and character patterns — between a draft and a trained author, and points out where they differ.
+- Does not judge meaning, correctness, originality, or quality. It is not an AI-text detector. A high score means only "this reads like the voice you trained."
 
 It is built for an LLM as much as for a person: an agent can run `check` after each rewrite, read the differences, and revise until the draft sits closer to the voice.
 
@@ -42,7 +42,7 @@ Profile: /home/me/blog/profiles/me.db
 Corpus reliability: good.
 $ omokage check examples/en/draft-keeps-voice.md  # score a draft (one profile needs no --author)
 Author: me
-Similarity: 70%
+Similarity: 92% (this author's self-similarity median 90%, range 75-91%)
 
 Differences:
 - character n-gram "gh" is higher than reference
@@ -57,7 +57,7 @@ The same idea rewritten in a stiff, formal voice scores low:
 ```shell
 $ omokage check --author me examples/en/draft-lost-voice.md
 Author: me
-Similarity: 26%
+Similarity: 0% (this author's self-similarity median 90%, range 75-91%)
 
 Differences:
 - average sentence length is higher than reference
@@ -98,7 +98,7 @@ These checks look at sample size and consistency, not writing quality.
 
 ![doctor demo](./doc/img/doctor.gif)
 
-`doctor --format json` gives the same report as data. `train` prints the reliability too (with the findings and a pointer to `doctor` when a corpus is thin or mixed), and `show --format json` carries the rating and findings so you can read a profile's standing later. A mixed corpus is flagged by the feature it disagrees on (often the register or kanji/kana balance) — the fix is to split it into one profile per voice.
+`doctor --format json` returns the same report as data. `train` prints the reliability too, and `show --format json` stores the rating and findings so you can inspect a profile later. A mixed corpus is usually flagged by the feature it disagrees on, often the register or kanji/kana balance; the fix is to split it into one profile per voice.
 
 ## Choosing the author
 
@@ -121,24 +121,26 @@ These checks look at sample size and consistency, not writing quality.
 $ score=$(omokage check --score-only draft.md)
 $ [ "$score" -ge 70 ] && echo "close enough"
 
-$ omokage check --author me --explain examples/ja/draft-lost-voice.md
+$ omokage check --author me --explain examples/en/draft-lost-voice.md
 Author: me
-Similarity: 0%
+Similarity: 0% (this author's self-similarity median 90%, range 75-91%)
+Score driver: lexical
+Scoring note: This score is computed from the full fingerprint and structure mix; the paragraph-level scalar drift below is supporting detail and usually contributes less than the lexical fingerprint.
 
 High-level style differences (fix these first):
-  1. polite sentence-ending ratio is lower than reference [register]
-       target 0.000  reference 1.000 ± 0.000  (50.0σ)
+  1. average sentence length is higher than reference [structure]
+       target 292.3  reference 40.4 ± 1.540  (62.3σ)
   ...
 
 Paragraphs that drift most:
-  #2 (50.0σ; polite sentence-ending ratio lower): 雨天時は在宅で過ごすケースが多い。特段の活動は行わない…
+  #2 (74.9σ; average sentence length higher): Subsequently, a notebook is utilized for the purpo…
 ```
 
 ![explain demo](./doc/img/explain.gif)
 
 ## Using omokage with an LLM
 
-Train once, then on each rewrite have the agent run `check --format json` and read it back. The JSON leads with `high_level_drift` — the editable features, each with a `priority` and `actionable` flag — so the agent knows what to change first; `segments` points at the paragraphs that drift most, and `term_warnings` flags notation that differs from your learned preference (never part of the score). For a lighter payload to hand an agent, `show --author me --format json --summary` returns provenance and the quality rating without the (often large) term list. omokage tells the agent how close the draft sits to your voice and where it strays — not whether it is correct or good, so keep a human in the loop.
+Train once, then have the agent run `check --format json` after each rewrite. The JSON leads with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag; `segments` points at the paragraphs that drift most, and `term_warnings` flags notation that differs from your learned preference. For a lighter payload, `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. omokage tells the agent how close the draft sits to your voice and where it strays, not whether it is correct or good, so keep a human in the loop.
 
 ## Term preferences
 
@@ -157,7 +159,7 @@ By default omokage finds an `omokage.toml` by walking up from the current direct
 
 ## How it scores
 
-Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/` (one per author) — the numbers only, never the text. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta: the function-word and n-gram fingerprint carries most of the signal, a clear register shift is penalized on top, and shape only nudges. Code blocks are stripped first, so the score reflects prose.
+Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores only the numbers, never the text. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta: the function-word and n-gram fingerprint carries most of the signal, a clear register shift is penalized on top, and shape only nudges. The final 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means "close to this author's own typical variation" rather than "three sigmas from the mean." Profiles trained before this baseline was added still work, but retraining is recommended so the calibrated score and self-similarity anchor are available. Code blocks are stripped first, so the score reflects prose.
 
 For Japanese, which has no spaces between words, these features use morphological analysis (kagome) rather than whitespace tokenization: the function-word fingerprint counts particles and auxiliaries as whole morphemes (not substrings), the register is read from each sentence's closing predicate, and conjunction frequency uses a real morpheme denominator. On a held-out author-attribution test this raised accuracy over the previous heuristics. Two further Japanese signals — a part-of-speech n-gram fingerprint and lemma-based vocabulary richness — are available but off by default (`pos_ngram_frequency`, `type_token_ratio` in the config), since on that test they did not help.
 
