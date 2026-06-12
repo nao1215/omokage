@@ -874,8 +874,10 @@ const (
 	// before it counts as a register shift. Only the excess above this hinge is
 	// charged, so a genuine same-register document is untouched while a wholesale
 	// register flip — an LLM imitation in the opposite register, or cross-language
-	// text whose register features collapse to zero — is penalized sharply.
-	registerTolerance = 2.5
+	// text whose register features collapse to zero — is penalized sharply. 3.0
+	// leaves roughly a 0.06 ratio shift inside the free band under the 0.02 ratio
+	// std floor, which better matches the author's own mild register wobble.
+	registerTolerance = 3.0
 )
 
 // groupDrift holds the mean z-score of each feature group for a single
