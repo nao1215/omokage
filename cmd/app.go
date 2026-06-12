@@ -530,6 +530,7 @@ func (a *App) runCheck(args []string) int {
 			return 1
 		}
 		comparison := profile.Score(record.Distribution, targetMetrics, scope.Config.Features)
+		comparison.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
 		writef(a.stdout, "%d\n", comparison.Similarity)
 		return 0
 	}
@@ -544,9 +545,11 @@ func (a *App) runCheck(args []string) int {
 			writeLine(a.stderr, err)
 			return 1
 		}
+		comparison := profile.Score(record.Distribution, targetMetrics, scope.Config.Features)
+		comparison.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
 		renderComparison(a.stdout, renderOptions{
 			author:     record.Author,
-			comparison: profile.Score(record.Distribution, targetMetrics, scope.Config.Features),
+			comparison: comparison,
 		})
 		// A one-line pointer to the detailed report, but only when a person is
 		// watching: it goes to stderr and only when stderr is a terminal. A pipe, a
@@ -565,6 +568,7 @@ func (a *App) runCheck(args []string) int {
 		return 1
 	}
 	explanation := profile.Explain(record.Distribution, targetMetrics, segments, scope.Config.Features)
+	explanation.SelfSimilarity = profile.SelfSimilarityAnchorForStats(record.SelfSimilarity)
 	if *format == formatJSON {
 		// Term warnings are a separate layer from the similarity score: they report
 		// where the draft used a non-preferred surface, and never alter the score.
@@ -1379,12 +1383,21 @@ func renderComparison(w io.Writer, opt renderOptions) {
 		writef(w, "Reference: %s\n", opt.leftPath)
 		writef(w, "Target: %s\n", opt.rightPath)
 	}
-	writef(w, "Similarity: %d%%\n", opt.comparison.Similarity)
+	writeSimilarityLine(w, opt.comparison.Similarity, opt.comparison.SelfSimilarity)
 	writeLine(w)
 	writeLine(w, "Differences:")
 	for _, difference := range opt.comparison.Differences {
 		writef(w, "- %s\n", difference)
 	}
+}
+
+func writeSimilarityLine(w io.Writer, similarity int, anchor *profile.SimilarityAnchor) {
+	writef(w, "Similarity: %d%%", similarity)
+	if anchor != nil {
+		writef(w, " (this author's self-similarity median %d%%, range %d-%d%%)",
+			anchor.Median, anchor.Low, anchor.High)
+	}
+	writeLine(w)
 }
 
 func documentMetrics(docs []feature.Document) []feature.Metrics {

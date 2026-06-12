@@ -19,7 +19,7 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 	if author != "" {
 		writef(w, "Author: %s\n", author)
 	}
-	writef(w, "Similarity: %d%%\n", explanation.Similarity)
+	writeSimilarityLine(w, explanation.Similarity, explanation.SelfSimilarity)
 	if explanation.ScoreDriver != "" {
 		writef(w, "Score driver: %s\n", explanation.ScoreDriver)
 	}
@@ -78,6 +78,7 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 	payload := explanationJSON{
 		Author:         author,
 		Similarity:     explanation.Similarity,
+		SelfSimilarity: toAnchorJSON(explanation.SelfSimilarity),
 		ScoreDriver:    explanation.ScoreDriver,
 		ScoreNote:      explanation.ScoreNote,
 		HighLevelDrift: toDriftJSON(high),
@@ -93,6 +94,7 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 type explanationJSON struct {
 	Author         string             `json:"author"`
 	Similarity     int                `json:"similarity"`
+	SelfSimilarity *similarityAnchorJSON `json:"self_similarity_anchor,omitempty"`
 	ScoreDriver    string             `json:"score_driver,omitempty"`
 	ScoreNote      string             `json:"score_note,omitempty"`
 	HighLevelDrift []featureDriftJSON `json:"high_level_drift"`
@@ -161,6 +163,13 @@ type segmentJSON struct {
 	Direction string  `json:"direction"`
 }
 
+type similarityAnchorJSON struct {
+	Median  int `json:"median"`
+	Low     int `json:"low"`
+	High    int `json:"high"`
+	Samples int `json:"samples"`
+}
+
 // splitDrifts separates the prioritized drift list into its high-level and
 // low-level halves while preserving the priority order within each.
 func splitDrifts(drifts []profile.FeatureDrift) (high, low []profile.FeatureDrift) {
@@ -218,6 +227,18 @@ func toSegmentJSON(segments []profile.SegmentDrift) []segmentJSON {
 		})
 	}
 	return out
+}
+
+func toAnchorJSON(anchor *profile.SimilarityAnchor) *similarityAnchorJSON {
+	if anchor == nil {
+		return nil
+	}
+	return &similarityAnchorJSON{
+		Median:  anchor.Median,
+		Low:     anchor.Low,
+		High:    anchor.High,
+		Samples: anchor.Samples,
+	}
 }
 
 // formatValue trims feature values to a readable width: ratios sit in [0,1] and
