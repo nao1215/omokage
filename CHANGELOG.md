@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-12
+
 ### Added
 
 - Training now records a leave-one-out self-similarity baseline per profile.
