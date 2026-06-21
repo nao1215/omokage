@@ -87,11 +87,41 @@ var fileExtensions = map[string]bool{
 // signal are never touched — only the embedded Latin tokens are.
 var technicalTokenPattern = regexp.MustCompile(`\.?[A-Za-z0-9](?:[A-Za-z0-9_./\-]*[A-Za-z0-9])?`)
 
-// versionTokenPattern matches a version-like numeric string: an optional leading
-// v then digits, optionally followed by dotted numeric segments (v1, v1.2.3,
-// 1.25, 2025.12). A bare integer is intentionally excluded so it falls through to
-// the <NUMBER> class instead.
-var versionTokenPattern = regexp.MustCompile(`^v\d+(?:\.\d+)*$|^\d+(?:\.\d+)+$`)
+// isVersionToken reports whether a separator-trimmed token is a version-like
+// numeric string — an optional leading v then digits, optionally followed by
+// dotted numeric segments (v1, v1.2.3, 1.25, 2025.12). A bare integer is excluded
+// (it falls through to the <NUMBER> class). It scans bytes directly rather than
+// running a regexp, because classifyTechnicalToken is called once per technical
+// run and a per-token regexp match dominated the masking cost.
+func isVersionToken(token string) bool {
+	i, n := 0, len(token)
+	hasV := false
+	if i < n && token[i] == 'v' {
+		hasV = true
+		i++
+	}
+	if i >= n || token[i] < '0' || token[i] > '9' {
+		return false
+	}
+	dots := 0
+	for i < n {
+		switch c := token[i]; {
+		case c >= '0' && c <= '9':
+			i++
+		case c == '.':
+			dots++
+			i++
+			if i >= n || token[i] < '0' || token[i] > '9' {
+				return false // a dot must be followed by a digit
+			}
+		default:
+			return false // any other character disqualifies a version token
+		}
+	}
+	// The v-prefixed form needs no dot (v1); the bare-numeric form needs at least
+	// one (1.25), so a plain integer stays a <NUMBER>.
+	return hasV || dots >= 1
+}
 
 // MaskTechnicalTopicTokens replaces topic-heavy technical tokens — repository
 // names, dotted identifiers, snake_case/kebab-case/CamelCase identifiers, version
@@ -147,7 +177,7 @@ func classifyTechnicalToken(token string) (string, bool) {
 	if strings.Contains(token, "/") {
 		return placeholderRepo, true
 	}
-	if versionTokenPattern.MatchString(token) {
+	if isVersionToken(token) {
 		return placeholderVersion, true
 	}
 	if strings.Contains(token, ".") {
