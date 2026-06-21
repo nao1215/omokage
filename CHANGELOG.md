@@ -7,6 +7,28 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Topic-heavy technical tokens — repository names (`owner/repo`), dotted
+  identifiers (`sql.DB`), snake_case/kebab-case/CamelCase identifiers, version
+  strings (`v1.2.3`, `1.25`), uppercase acronyms (`CSV`, `WASM`), filenames
+  (`data.csv`, `.parquet`), and bare numbers — are now masked to fixed
+  placeholders before the lexical and character n-gram fingerprints are measured.
+  Two posts by the same author about different libraries no longer read as
+  different writers. Every other feature (sentence length, punctuation, register,
+  script ratios, POS n-grams) keeps measuring the original prose, so the masking
+  only removes topic noise from the topic-sensitive signals.
+- Lexical drift is now aggregated per family (function word, character n-gram, POS
+  n-gram) with an upper-trimmed robust mean (clip each z to 4.0, drop the top
+  10%, average the rest), so a few extreme z-scores left by a residual topic token
+  no longer dominate a family's contribution.
+- The structural remainder weight was raised from 0.05 to 0.10: with identifier
+  and product-name noise pulled out of the lexical fingerprint, the structural
+  shape of the prose is a more trustworthy stylistic signal.
+- `feature.Version` was bumped to 3. The lexical and character n-gram features now
+  describe a profile differently, so profiles trained by an older omokage warn
+  until retrained.
+
 ## [0.5.0] - 2026-06-12
 
 ### Added

@@ -51,6 +51,187 @@ func addNgrams(freq map[string]float64, runes []rune, order int) {
 // inlineCodePattern matches an inline code span delimited by backticks.
 var inlineCodePattern = regexp.MustCompile("`[^`]*`")
 
+// Placeholders that topic-heavy technical tokens collapse to before the lexical
+// and character n-gram fingerprints are measured. They are fixed strings, so the
+// same identifier-shaped token always contributes the same n-grams regardless of
+// which product, repository, or version a post happens to discuss. See
+// MaskTechnicalTopicTokens.
+const (
+	placeholderRepo    = "<REPO>"
+	placeholderIdent   = "<IDENT>"
+	placeholderVersion = "<VERSION>"
+	placeholderAcronym = "<ACRONYM>"
+	placeholderFile    = "<FILE>"
+	placeholderNumber  = "<NUMBER>"
+)
+
+// fileExtensions is the closed set of file extensions that mark a token as a
+// filename/extension reference (data.csv, .parquet, main.go). It is deliberately
+// small and concrete: a token whose final dotted segment is one of these is topic
+// noise (which data format a post discusses), not voice.
+var fileExtensions = map[string]bool{
+	"csv": true, "tsv": true, "ltsv": true, "parquet": true, "xlsx": true,
+	"xls": true, "json": true, "yaml": true, "yml": true, "toml": true,
+	"md": true, "txt": true, "go": true, "rs": true, "py": true, "js": true,
+	"ts": true, "jsx": true, "tsx": true, "java": true, "rb": true, "php": true,
+	"sh": true, "sql": true, "html": true, "css": true, "png": true, "jpg": true,
+	"jpeg": true, "gif": true, "svg": true, "pdf": true, "zip": true, "tar": true,
+	"gz": true, "mod": true, "sum": true, "lock": true, "ini": true, "xml": true,
+}
+
+// technicalTokenPattern matches a maximal run of ASCII technical characters that
+// begins and ends with an alphanumeric (so a trailing English sentence period or
+// a leading bullet dash is never absorbed) plus an optional leading dot, which
+// lets a bare extension reference (.csv) be caught. Japanese script characters
+// are outside the class, so the kana/kanji that carry the Japanese stylistic
+// signal are never touched — only the embedded Latin tokens are.
+var technicalTokenPattern = regexp.MustCompile(`\.?[A-Za-z0-9](?:[A-Za-z0-9_./\-]*[A-Za-z0-9])?`)
+
+// versionTokenPattern matches a version-like numeric string: an optional leading
+// v then digits, optionally followed by dotted numeric segments (v1, v1.2.3,
+// 1.25, 2025.12). A bare integer is intentionally excluded so it falls through to
+// the <NUMBER> class instead.
+var versionTokenPattern = regexp.MustCompile(`^v\d+(?:\.\d+)*$|^\d+(?:\.\d+)+$`)
+
+// MaskTechnicalTopicTokens replaces topic-heavy technical tokens — repository
+// names, dotted identifiers, snake_case/kebab-case/CamelCase identifiers, version
+// strings, uppercase acronyms, filenames, and bare numbers — with fixed
+// placeholders, so the lexical and character n-gram fingerprints measure how an
+// author writes rather than which product, library, or version a particular post
+// is about. It is applied ONLY to the inputs of the lexical/char-ngram features;
+// every scalar feature, the POS n-grams, and the script ratios keep measuring the
+// original prose, so the masking cannot move sentence length, punctuation, register,
+// or kana/kanji balance. Replacement (not deletion) preserves token positions, so
+// surrounding n-grams stay aligned.
+func MaskTechnicalTopicTokens(prose string) string {
+	return technicalTokenPattern.ReplaceAllStringFunc(prose, maskTechnicalToken)
+}
+
+// maskTechnicalToken classifies one technical run and returns its placeholder, or
+// the token unchanged when it is an ordinary word (a lowercase word, a single
+// capitalized word, a pronoun) that carries no topic noise. A leading dot is split
+// off first: it only belongs to the token when the token is a bare extension
+// (.csv); otherwise it is re-emitted so an English sentence boundary survives.
+func maskTechnicalToken(token string) string {
+	lead := ""
+	if strings.HasPrefix(token, ".") {
+		lead = "."
+		token = token[1:]
+		// A contiguous bare extension (.csv, .parquet) is a filename reference even
+		// though the stem is a single lowercase word the classifier would otherwise
+		// leave alone. The leading dot is what marks it, so it is absorbed here.
+		if fileExtensions[strings.ToLower(token)] {
+			return placeholderFile
+		}
+	}
+	placeholder, ok := classifyTechnicalToken(token)
+	if !ok {
+		return lead + token
+	}
+	// A bare ".csv" absorbs its leading dot; any other classification keeps the dot
+	// as separate punctuation so it is not silently swallowed.
+	if lead == "." && placeholder == placeholderFile {
+		return placeholderFile
+	}
+	return lead + placeholder
+}
+
+// classifyTechnicalToken decides which placeholder (if any) a separator-trimmed
+// token maps to. The order is significant: repository and version shapes are
+// checked before the generic dotted-identifier rule, and the all-uppercase
+// acronym rule is checked before the mixed-case CamelCase rule.
+func classifyTechnicalToken(token string) (string, bool) {
+	if token == "" {
+		return "", false
+	}
+	if strings.Contains(token, "/") {
+		return placeholderRepo, true
+	}
+	if versionTokenPattern.MatchString(token) {
+		return placeholderVersion, true
+	}
+	if strings.Contains(token, ".") {
+		segments := strings.Split(token, ".")
+		last := strings.ToLower(segments[len(segments)-1])
+		if fileExtensions[last] {
+			return placeholderFile, true
+		}
+		return placeholderIdent, true
+	}
+	if strings.Contains(token, "_") {
+		return placeholderIdent, true // snake_case
+	}
+	if strings.Contains(token, "-") {
+		return placeholderIdent, true // kebab-case
+	}
+	if isAllDigits(token) {
+		return placeholderNumber, true
+	}
+	if isUpperAcronym(token) {
+		return placeholderAcronym, true
+	}
+	if isCamelCase(token) {
+		return placeholderIdent, true
+	}
+	return "", false
+}
+
+// isAllDigits reports whether the token is a bare integer (the <NUMBER> class).
+func isAllDigits(token string) bool {
+	for _, r := range token {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isUpperAcronym reports whether the token is an all-uppercase acronym of at
+// least two characters (CSV, LTSV, WASM). Trailing digits are allowed (UTF8), but
+// at least one uppercase letter must be present so a bare number is not caught
+// here. A single uppercase letter (the English pronoun "I", an initial) is left
+// alone.
+func isUpperAcronym(token string) bool {
+	if len([]rune(token)) < 2 {
+		return false
+	}
+	hasLetter := false
+	for _, r := range token {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasLetter = true
+		case r >= '0' && r <= '9':
+			// allowed
+		default:
+			return false
+		}
+	}
+	return hasLetter
+}
+
+// isCamelCase reports whether the token is a mixed-case identifier with an
+// INTERNAL uppercase letter (GitHub, PascalCase, iOS, DataFrame). The internal
+// requirement is deliberate: a single leading capital (The, Foo) is
+// indistinguishable from an ordinary sentence-initial word or a proper noun, so
+// masking it would corrupt the English fingerprint; only the unmistakable
+// internal "hump" of an identifier qualifies.
+func isCamelCase(token string) bool {
+	runes := []rune(token)
+	hasLower := false
+	internalUpper := false
+	for i, r := range runes {
+		switch {
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= 'A' && r <= 'Z':
+			if i > 0 {
+				internalUpper = true
+			}
+		}
+	}
+	return hasLower && internalUpper
+}
+
 // Patterns for the non-prose constructs that survive code stripping but are
 // layout/markup, not natural language, so they must not feed the features.
 var (

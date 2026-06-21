@@ -402,7 +402,8 @@ type groupCounts struct {
 	register     int
 	other        int
 	functionWord int
-	ngram        int
+	charNgram    int
+	posNgram     int
 }
 
 type driftBreakdown struct {
@@ -415,19 +416,24 @@ type driftBreakdown struct {
 }
 
 func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
-	var registerZ, otherZ, functionWordZ, ngramZ float64
-	var registerCount, otherCount, functionWordCount, ngramCount int
+	var registerZ, otherZ float64
+	var registerCount, otherCount int
+	// The three lexical families keep their full per-feature z lists so each can be
+	// reduced with an upper-trimmed robust mean: a handful of extreme z-scores —
+	// the kind a residual topic token still produces in one char n-gram — no longer
+	// drags the whole family's contribution up the way a plain mean did.
+	var functionWordZs, charNgramZs, posNgramZs []float64
 	for _, drift := range drifts {
 		switch drift.Category {
 		case categoryRegister:
 			registerZ += drift.Z
 			registerCount++
 		case categoryFunctionWord:
-			functionWordZ += drift.Z
-			functionWordCount++
-		case categoryCharNgram, categoryPOSNgram:
-			ngramZ += drift.Z
-			ngramCount++
+			functionWordZs = append(functionWordZs, drift.Z)
+		case categoryCharNgram:
+			charNgramZs = append(charNgramZs, drift.Z)
+		case categoryPOSNgram:
+			posNgramZs = append(posNgramZs, drift.Z)
 		default:
 			otherZ += drift.Z
 			otherCount++
@@ -436,16 +442,18 @@ func summarizeDrifts(drifts []FeatureDrift) driftBreakdown {
 	groups := groupDrift{
 		register:     meanOf(registerZ, registerCount),
 		other:        meanOf(otherZ, otherCount),
-		functionWord: meanOf(functionWordZ, functionWordCount),
-		ngram:        meanOf(ngramZ, ngramCount),
+		functionWord: robustFamilyMean(functionWordZs),
+		charNgram:    robustFamilyMean(charNgramZs),
+		posNgram:     robustFamilyMean(posNgramZs),
 	}
 	breakdown := driftBreakdown{
 		groups: groups,
 		counts: groupCounts{
 			register:     registerCount,
 			other:        otherCount,
-			functionWord: functionWordCount,
-			ngram:        ngramCount,
+			functionWord: len(functionWordZs),
+			charNgram:    len(charNgramZs),
+			posNgram:     len(posNgramZs),
 		},
 	}
 	breakdown.lexicalTerm = lexicalGroupMean(groups, breakdown.counts)
@@ -733,8 +741,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 	}
 
-	ngramDist := 0.0
-	ngramCount := 0
+	charNgramDist := 0.0
+	charNgramCount := 0
 	if flags.CharNgramFrequency {
 		seen := make(map[string]struct{}, len(reference.CharNgrams)+len(target.CharNgrams))
 		for ngram := range reference.CharNgrams {
@@ -750,8 +758,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 				continue
 			}
 			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
-			ngramDist += distance
-			ngramCount++
+			charNgramDist += distance
+			charNgramCount++
 			results = append(results, scored{
 				label:     fmt.Sprintf("character n-gram %q", ngram),
 				distance:  distance,
@@ -760,6 +768,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 	}
 
+	posNgramDist := 0.0
+	posNgramCount := 0
 	if flags.POSNgramFrequency {
 		seen := make(map[string]struct{}, len(reference.POSNgrams)+len(target.POSNgrams))
 		for ngram := range reference.POSNgrams {
@@ -775,8 +785,8 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 				continue
 			}
 			distance := math.Min(1, math.Abs(left-right)*lexicalDistanceScale)
-			ngramDist += distance
-			ngramCount++
+			posNgramDist += distance
+			posNgramCount++
 			results = append(results, scored{
 				label:     fmt.Sprintf("part-of-speech n-gram %q", ngram),
 				distance:  distance,
@@ -785,7 +795,7 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		}
 	}
 
-	if registerCount+otherCount+functionWordCount+ngramCount == 0 {
+	if registerCount+otherCount+functionWordCount+charNgramCount+posNgramCount == 0 {
 		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
 	}
 
@@ -796,13 +806,15 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 		register:     registerCount,
 		other:        otherCount,
 		functionWord: functionWordCount,
-		ngram:        ngramCount,
+		charNgram:    charNgramCount,
+		posNgram:     posNgramCount,
 	}
 	drift := combineCompareDriftWithCounts(groupDrift{
 		register:     meanOf(registerDist, registerCount),
 		other:        meanOf(otherDist, otherCount),
 		functionWord: meanOf(functionWordDist, functionWordCount),
-		ngram:        meanOf(ngramDist, ngramCount),
+		charNgram:    meanOf(charNgramDist, charNgramCount),
+		posNgram:     meanOf(posNgramDist, posNgramCount),
 	}, counts)
 	similarity := clampPercent(int(math.Round((1 - drift) * 100)))
 
@@ -862,8 +874,13 @@ var registerLabels = map[string]bool{
 // while an author's own mild register variation only nudges it. The structural
 // remainder barely separates authors on its own, so it nudges least.
 const (
-	registerWeight    = 1.0
-	otherStructWeight = 0.05
+	registerWeight = 1.0
+	// otherStructWeight scales the structural remainder (sentence length, layout,
+	// variance) on top of the lexical fingerprint. It was raised from 0.05 to 0.10
+	// alongside the topic masking: with identifier and product-name noise pulled out
+	// of the lexical fingerprint, the structural shape of the prose is a more
+	// trustworthy stylistic signal and is allowed to nudge a little harder.
+	otherStructWeight = 0.10
 	// registerSaturation caps the register penalty once the drift is already
 	// clearly far outside the author's normal range. This prevents the ratio-floor
 	// artifact from collapsing both "register flipped but otherwise identical" and
@@ -889,7 +906,8 @@ type groupDrift struct {
 	register     float64
 	other        float64
 	functionWord float64
-	ngram        float64
+	charNgram    float64
+	posNgram     float64
 }
 
 const explanationScoreNote = "This score is computed from the full fingerprint and structure mix; the paragraph-level scalar drift below is supporting detail and usually contributes less than the lexical fingerprint."
@@ -905,7 +923,8 @@ const explanationScoreNote = "This score is computed from the full fingerprint a
 func combineDrift(g groupDrift) float64 {
 	return combineDriftWithCounts(g, groupCounts{
 		functionWord: boolCount(g.functionWord != 0),
-		ngram:        boolCount(g.ngram != 0),
+		charNgram:    boolCount(g.charNgram != 0),
+		posNgram:     boolCount(g.posNgram != 0),
 	})
 }
 
@@ -935,7 +954,8 @@ const (
 func combineCompareDrift(g groupDrift) float64 {
 	return combineCompareDriftWithCounts(g, groupCounts{
 		functionWord: boolCount(g.functionWord != 0),
-		ngram:        boolCount(g.ngram != 0),
+		charNgram:    boolCount(g.charNgram != 0),
+		posNgram:     boolCount(g.posNgram != 0),
 	})
 }
 
@@ -944,6 +964,11 @@ func combineCompareDriftWithCounts(g groupDrift, counts groupCounts) float64 {
 	return lexical + registerCompareWeight*g.register + otherCompareWeight*g.other
 }
 
+// lexicalGroupMean reduces the lexical families to a single drift contribution:
+// the mean of whichever of the three families (function word, character n-gram,
+// POS n-gram) are active. Averaging the families rather than pooling every
+// sub-feature keeps the ~400 char n-grams from outweighing the ~150 function
+// words or the POS n-grams by sheer count; each family votes once.
 func lexicalGroupMean(g groupDrift, counts groupCounts) float64 {
 	sum := 0.0
 	active := 0
@@ -951,14 +976,43 @@ func lexicalGroupMean(g groupDrift, counts groupCounts) float64 {
 		sum += g.functionWord
 		active++
 	}
-	if counts.ngram > 0 {
-		sum += g.ngram
+	if counts.charNgram > 0 {
+		sum += g.charNgram
+		active++
+	}
+	if counts.posNgram > 0 {
+		sum += g.posNgram
 		active++
 	}
 	if active == 0 {
 		return 0
 	}
 	return sum / float64(active)
+}
+
+// robustFamilyMean reduces a lexical family's per-feature z-scores to a single,
+// outlier-resistant contribution. Each z is clipped to 4.0 so one runaway feature
+// cannot dominate, the family is sorted, the top 10% are dropped (an upper trim),
+// and the remainder is averaged. Pooling raw z-scores let a few extreme values —
+// the residue a topic-specific token leaves in one or two character n-grams —
+// inflate the whole family; trimming the high tail keeps the contribution
+// representative of the family's typical drift.
+func robustFamilyMean(zs []float64) float64 {
+	if len(zs) == 0 {
+		return 0
+	}
+	clipped := make([]float64, len(zs))
+	for i, z := range zs {
+		clipped[i] = math.Min(z, 4.0)
+	}
+	sort.Float64s(clipped)
+	drop := int(math.Floor(float64(len(clipped)) * 0.10))
+	keep := clipped[:len(clipped)-drop]
+	sum := 0.0
+	for _, z := range keep {
+		sum += z
+	}
+	return sum / float64(len(keep))
 }
 
 func registerExcess(register float64) float64 {
