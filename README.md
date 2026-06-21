@@ -132,6 +132,7 @@ High-level style differences (fix these first):
        target 292.3  reference 40.4 ± 1.540  (62.3σ)
   ...
 
+Typical paragraph drift (median): 18.7σ
 Paragraphs that drift most:
   #2 (74.9σ; average sentence length higher): Subsequently, a notebook is utilized for the purpo…
 ```
@@ -140,7 +141,7 @@ Paragraphs that drift most:
 
 ## Using omokage with an LLM
 
-Train once, then have the agent run `check --format json` after each rewrite. The JSON leads with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag; `segments` points at the paragraphs that drift most, and `term_warnings` flags notation that differs from your learned preference. For a lighter payload, `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. omokage tells the agent how close the draft sits to your voice and where it strays, not whether it is correct or good, so keep a human in the loop.
+Train once, then have the agent run `check --format json` after each rewrite. The JSON leads with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag; `segments` points at the paragraphs that drift most, `segment_style_drift` summarizes how far a typical paragraph strays (the median per-paragraph drift, reported for insight only — it never affects the score), and `term_warnings` flags notation that differs from your learned preference. For a lighter payload, `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. omokage tells the agent how close the draft sits to your voice and where it strays, not whether it is correct or good, so keep a human in the loop.
 
 ## Term preferences
 
