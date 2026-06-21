@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781229156829,
+  "lastUpdate": 1782010994583,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -3864,6 +3864,150 @@ window.BENCHMARK_DATA = {
             "value": 905,
             "unit": "allocs/op",
             "extra": "5160 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "Naohiro CHIKAMATSU",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "n.chika156@gmail.com",
+            "name": "CHIKAMATSU Naohiro",
+            "username": "nao1215"
+          },
+          "distinct": true,
+          "id": "f0f42bf19ed604dec2806933e9f054d9a27bd00a",
+          "message": "test(cmd): address review feedback on the Debimate regression tests\n\n- Fix \"behaviour\" -> \"behavior\" (misspell).\n- Mark the four Debimate regression tests t.Parallel(); each trains into its own\n  temp workDir, so they are independent.\n- Check filepath.Abs via the existing fixtureAbs helper instead of ignoring the\n  error.\n\nAlso tighten the dotted/hyphenated identifier rule (CodeRabbit): a token whose\nsegments are all single letters is a prose abbreviation (e.g, i.e, a.k.a), not an\nidentifier like sql.DB, so it is no longer masked.",
+          "timestamp": "2026-06-21T12:02:32+09:00",
+          "tree_id": "70f1e0d966775c549b17f3cb634f91bda84c5f96",
+          "url": "https://github.com/nao1215/omokage/commit/f0f42bf19ed604dec2806933e9f054d9a27bd00a"
+        },
+        "date": 1782010993784,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 2238237,
+            "unit": "ns/op\t  791693 B/op\t    5687 allocs/op",
+            "extra": "566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 2238237,
+            "unit": "ns/op",
+            "extra": "566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 791693,
+            "unit": "B/op",
+            "extra": "566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 5687,
+            "unit": "allocs/op",
+            "extra": "566 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 3719485,
+            "unit": "ns/op\t   81520 B/op\t      50 allocs/op",
+            "extra": "306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 3719485,
+            "unit": "ns/op",
+            "extra": "306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 81520,
+            "unit": "B/op",
+            "extra": "306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 50,
+            "unit": "allocs/op",
+            "extra": "306 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 221278,
+            "unit": "ns/op\t   95352 B/op\t     746 allocs/op",
+            "extra": "5992 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 221278,
+            "unit": "ns/op",
+            "extra": "5992 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 95352,
+            "unit": "B/op",
+            "extra": "5992 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 746,
+            "unit": "allocs/op",
+            "extra": "5992 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 226988,
+            "unit": "ns/op\t   82641 B/op\t     744 allocs/op",
+            "extra": "5691 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 226988,
+            "unit": "ns/op",
+            "extra": "5691 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 82641,
+            "unit": "B/op",
+            "extra": "5691 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 744,
+            "unit": "allocs/op",
+            "extra": "5691 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 298699,
+            "unit": "ns/op\t  224554 B/op\t     803 allocs/op",
+            "extra": "5058 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 298699,
+            "unit": "ns/op",
+            "extra": "5058 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 224554,
+            "unit": "B/op",
+            "extra": "5058 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 803,
+            "unit": "allocs/op",
+            "extra": "5058 times\n4 procs"
           }
         ]
       }
