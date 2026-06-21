@@ -31,6 +31,14 @@ func benchCorpus(docs, paragraphs int) []Metrics {
 
 func BenchmarkExtractText(b *testing.B) {
 	doc := benchDoc(8)
+	// The Japanese analyzer loads its embedded dictionary once, on the first
+	// tokenize call ever (a sync.Once). That one-time load allocates heavily and is
+	// not part of per-document extraction cost, so trigger it before the timed loop;
+	// otherwise it is amortized into the first iteration and, on a slow CI runner
+	// that completes few iterations, inflates the reported allocs/op and ns/op enough
+	// to trip the benchmark regression gate. The other benchmarks already warm it in
+	// their setup (they call ExtractText to build a corpus before looping).
+	_ = ExtractText(doc)
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = ExtractText(doc)
