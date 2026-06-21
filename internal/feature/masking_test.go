@@ -53,6 +53,9 @@ func TestMaskTechnicalTopicTokensLeavesOrdinaryWords(t *testing.T) {
 		"the quick brown fox jumps",
 		"I think this is fine",
 		"The morning was quiet and cold",
+		// Dotted prose abbreviations are not identifiers and must survive.
+		"use it sparingly, e.g in tests",
+		"that is, i.e the second case",
 		"今日は朝から雨が降っています。",
 		"敬体と常体の違いを測りたい。",
 	}

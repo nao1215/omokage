@@ -186,13 +186,26 @@ func classifyTechnicalToken(token string) (string, bool) {
 		if fileExtensions[last] {
 			return placeholderFile, true
 		}
-		return placeholderIdent, true
+		// A dotted token whose segments are all single letters is a prose
+		// abbreviation (e.g, i.e, a.k.a), not an identifier like sql.DB or
+		// pkg.Type, so it is left for the lexical fingerprint to see.
+		if multiSegmentIdentifier(segments) {
+			return placeholderIdent, true
+		}
+		return "", false
 	}
 	if strings.Contains(token, "_") {
-		return placeholderIdent, true // snake_case
+		return placeholderIdent, true // snake_case (the underscore is code, not prose)
 	}
 	if strings.Contains(token, "-") {
-		return placeholderIdent, true // kebab-case
+		// kebab-case identifier (go-arch-lint, read-file). A hyphenated token whose
+		// segments are all single letters (a-b) is not a real identifier; ordinary
+		// hyphenated English (well-known) still masks, but consistently across every
+		// document, so it removes a little style signal without adding spurious drift.
+		if multiSegmentIdentifier(strings.Split(token, "-")) {
+			return placeholderIdent, true
+		}
+		return "", false
 	}
 	if isAllDigits(token) {
 		return placeholderNumber, true
@@ -204,6 +217,19 @@ func classifyTechnicalToken(token string) (string, bool) {
 		return placeholderIdent, true
 	}
 	return "", false
+}
+
+// multiSegmentIdentifier reports whether a dotted/hyphenated token looks like a
+// real identifier rather than a prose abbreviation: at least one of its segments
+// is two or more characters long. It separates sql.DB / go-arch-lint (identifiers)
+// from e.g / i.e / a.k.a (prose), whose segments are all single letters.
+func multiSegmentIdentifier(segments []string) bool {
+	for _, segment := range segments {
+		if len(segment) >= 2 {
+			return true
+		}
+	}
+	return false
 }
 
 // isAllDigits reports whether the token is a bare integer (the <NUMBER> class).

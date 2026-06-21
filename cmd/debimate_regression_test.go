@@ -10,7 +10,7 @@ import (
 
 // debimateFixtureDir is the Debimate validation corpus checked into the repo. The
 // fixtures are real article bodies (tech, diary, and rewrites) used to assert the
-// topic-masking and robust-aggregation behaviour at the command level, against the
+// topic-masking and robust-aggregation behavior at the command level, against the
 // same paths a user would pass to `train`/`check`.
 const debimateFixtureDir = "../spec/testdata/debimate/ja"
 
@@ -95,6 +95,7 @@ func trainDebimate(t *testing.T) string {
 // loose — the test asserts the ordering and a meaningful gap, not brittle exact
 // scores.
 func TestDebimateGenreSeparation(t *testing.T) {
+	t.Parallel()
 	workDir := trainDebimate(t)
 
 	var tech, diary []int
@@ -121,6 +122,7 @@ func TestDebimateGenreSeparation(t *testing.T) {
 // barely moves its score, because those tokens are masked out of the lexical and
 // character n-gram fingerprints before scoring.
 func TestDebimateTopicRobustness(t *testing.T) {
+	t.Parallel()
 	workDir := trainDebimate(t)
 
 	pairs := []struct{ original, swapped string }{
@@ -146,6 +148,7 @@ func TestDebimateTopicRobustness(t *testing.T) {
 // chopped short) drops the score well below the same-voice technical holdout, so
 // the masking has not blunted sensitivity to a genuine style change.
 func TestDebimateStyleSensitivity(t *testing.T) {
+	t.Parallel()
 	workDir := trainDebimate(t)
 
 	var tech, styleShifted []int
@@ -169,12 +172,13 @@ func TestDebimateStyleSensitivity(t *testing.T) {
 // (which shift register) makes doctor flag the corpus as less reliable. It asserts
 // the relationship (mixed is noisier than pure), not the exact finding text.
 func TestDebimateDoctorMixedCorpus(t *testing.T) {
+	t.Parallel()
 	workDir := t.TempDir()
 	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
 		t.Fatalf("init failed: %s", stderr)
 	}
-	techDir, _ := filepath.Abs(filepath.Join(debimateFixtureDir, "tech", "train"))
-	diaryDir, _ := filepath.Abs(filepath.Join(debimateFixtureDir, "diary", "holdout"))
+	techDir := fixtureAbs(t, filepath.Join("tech", "train"))
+	diaryDir := fixtureAbs(t, filepath.Join("diary", "holdout"))
 
 	code, pureOut, stderr := runApp(t, workDir, "doctor", techDir)
 	if code != 0 {
