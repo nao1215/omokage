@@ -95,7 +95,7 @@ func TestRegisterPenaltyLeavesToleranceRegionUntouched(t *testing.T) {
 	got := combineDrift(groupDrift{
 		register:     registerTolerance,
 		functionWord: 0.6,
-		ngram:        0.4,
+		charNgram:    0.4,
 		other:        1.0,
 	})
 	want := 0.5 + otherStructWeight*1.0
@@ -177,10 +177,10 @@ func TestCompareCountsExactLexicalMatchesAsPresent(t *testing.T) {
 
 	got := combineCompareDriftWithCounts(groupDrift{
 		functionWord: 0,
-		ngram:        0.4,
+		charNgram:    0.4,
 	}, groupCounts{
 		functionWord: 1,
-		ngram:        1,
+		charNgram:    1,
 	})
 	want := 0.2
 	if math.Abs(got-want) > 1e-9 {
@@ -514,6 +514,120 @@ func TestExplainSkipsShortSegments(t *testing.T) {
 			t.Fatalf("a short heading should be skipped, got %q", segment.Excerpt)
 		}
 	}
+}
+
+// TestRobustFamilyMeanResistsOutliers checks that a handful of extreme z-scores —
+// the residue a topic token can still leave in one or two character n-grams — do
+// not drag a lexical family's aggregate up the way a plain mean would. The robust
+// mean clips each z to 4.0 and drops the top 10%, so the contribution stays close
+// to the family's typical drift.
+func TestRobustFamilyMeanResistsOutliers(t *testing.T) {
+	t.Parallel()
+
+	// Twenty near-zero values plus two large spikes.
+	zs := make([]float64, 0, 22)
+	for range 20 {
+		zs = append(zs, 0.1)
+	}
+	zs = append(zs, 12.0, 9.0)
+
+	robust := robustFamilyMean(zs)
+
+	var plainSum float64
+	for _, z := range zs {
+		plainSum += z
+	}
+	plain := plainSum / float64(len(zs))
+
+	if robust >= plain {
+		t.Fatalf("robust mean should sit below the plain mean given outliers: robust=%f plain=%f", robust, plain)
+	}
+	// With 22 values, drop = floor(2.2) = 2, removing both spikes, so the kept set
+	// is the twenty 0.1 values and the robust mean is ~0.1.
+	if math.Abs(robust-0.1) > 1e-9 {
+		t.Fatalf("expected the two spikes to be trimmed, leaving ~0.1, got %f", robust)
+	}
+}
+
+// TestRobustFamilyMeanClipsBeforeTrimming verifies the 4.0 clip applies even when
+// the trim does not remove a value, so a single very large z is bounded rather
+// than allowed to dominate a small family.
+func TestRobustFamilyMeanClipsBeforeTrimming(t *testing.T) {
+	t.Parallel()
+
+	// Two values, drop = floor(0.2) = 0, so nothing is trimmed; the clip is the
+	// only protection and must cap the 100.0 at 4.0.
+	got := robustFamilyMean([]float64{0.0, 100.0})
+	want := (0.0 + 4.0) / 2
+	if math.Abs(got-want) > 1e-9 {
+		t.Fatalf("expected the large z to be clipped to 4.0 before averaging: got=%f want=%f", got, want)
+	}
+}
+
+// TestTopicSwapKeepsSimilarity is the end-to-end topic-robustness guarantee: a
+// target whose prose matches the author but whose product names, repository
+// names, and versions have been swapped should still score close to the original,
+// because those tokens are masked out of the fingerprint.
+func TestTopicSwapKeepsSimilarity(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	corpus := []string{
+		"今日は sql.DB を使って CSV を読み込みました。とても便利だと感じました。設定も簡単でした。",
+		"昨日は pkg.Store を使って TSV を書き出しました。処理は速かったと思います。動作も安定していました。",
+		"先週は repo.Client を使って JSON を変換しました。結果はきれいにまとまりました。手順も明快でした。",
+		"今朝は data.Loader を使って YAML を解析しました。挙動はとても素直でした。記述も読みやすかったです。",
+	}
+	dist := distributionFromTexts(corpus)
+
+	original := feature.ExtractText("今日は sql.DB を使って CSV を読み込みました。とても便利だと感じました。導入も滑らかでした。")
+	// Same prose, only the topic tokens swapped — a "topic swap".
+	topicSwapped := feature.ExtractText("今日は acme/widget を使って LTSV を読み込みました。とても便利だと感じました。導入も滑らかでした。")
+
+	originalScore := Score(dist, original, flags).Similarity
+	swappedScore := Score(dist, topicSwapped, flags).Similarity
+
+	if diff := abs(originalScore - swappedScore); diff > 5 {
+		t.Fatalf("topic swap should barely move the score (<=5), got original=%d swapped=%d diff=%d",
+			originalScore, swappedScore, diff)
+	}
+}
+
+// TestStyleShiftLosesSimilarity is the complementary guarantee: when the topic is
+// kept but the writing style is deliberately changed (register flipped from polite
+// to plain, sentences chopped short), the score must drop noticeably, so the
+// masking has not blunted the tool's sensitivity to genuine voice changes.
+func TestStyleShiftLosesSimilarity(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	corpus := []string{
+		"今日は sql.DB を使って CSV を読み込みました。とても便利だと感じました。設定も簡単でした。",
+		"昨日は pkg.Store を使って TSV を書き出しました。処理は速かったと思います。動作も安定していました。",
+		"先週は repo.Client を使って JSON を変換しました。結果はきれいにまとまったと思います。手順も明快でした。",
+		"今朝は data.Loader を使って YAML を解析しました。挙動はとても素直だと感じました。記述も読みやすかったです。",
+	}
+	dist := distributionFromTexts(corpus)
+
+	sameStyle := feature.ExtractText("今日は sql.DB を使って CSV を読み込みました。とても便利だと感じました。導入も滑らかでした。")
+	// Same topic tokens, but the register is flipped to 常体 and the sentences are
+	// chopped much shorter — a real style shift.
+	styleShifted := feature.ExtractText("sql.DBを使う。CSVを読む。便利だ。設定は簡単だ。速い。安定している。素直だ。")
+
+	sameScore := Score(dist, sameStyle, flags).Similarity
+	shiftedScore := Score(dist, styleShifted, flags).Similarity
+
+	if shiftedScore >= sameScore {
+		t.Fatalf("a deliberate style shift should lower the score below a same-style target: same=%d shifted=%d",
+			sameScore, shiftedScore)
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func distributionFromTexts(texts []string) feature.Distribution {

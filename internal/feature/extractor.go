@@ -16,8 +16,13 @@ import (
 // an older omokage is being compared with newly-defined target metrics. Version 1
 // was the original whitespace/heuristic definitions; version 2 introduced the
 // kagome morphological measurement of conjunction frequency, the polite/plain
-// register, and the Japanese function-word fingerprint.
-const Version = 2
+// register, and the Japanese function-word fingerprint. Version 3 introduced the
+// topic masking of technical tokens (MaskTechnicalTopicTokens): the lexical and
+// character n-gram fingerprints are now measured on prose whose repository names,
+// identifiers, versions, acronyms, and filenames have collapsed to fixed
+// placeholders, so those two features describe a profile differently than a
+// version-2 profile did. A version-2 profile must therefore be retrained.
+const Version = 3
 
 type Metrics struct {
 	AverageSentenceLength    float64
@@ -454,6 +459,15 @@ func ExtractText(text string) Metrics {
 	// sentences in technical prose (version numbers, decimals), diluting the ratio.
 	japaneseSentences := max(strings.Count(prose, "。")+strings.Count(prose, "！")+strings.Count(prose, "？"), 1)
 
+	// The lexical and character n-gram fingerprints are measured on a topic-masked
+	// copy of the prose: product names, repository names, identifiers, and version
+	// numbers collapse to fixed placeholders so two posts by the same author about
+	// different libraries no longer look like different writers. Every other
+	// feature — the scalar structure features, the script ratios, and the POS
+	// n-grams (which run off the original morphemes) — keeps measuring the
+	// unmasked prose, so the masking shifts only the topic-sensitive signals.
+	maskedProse := MaskTechnicalTopicTokens(prose)
+
 	return Metrics{
 		AverageSentenceLength:    mean(sentenceLengths),
 		SentenceLengthVariance:   variance(sentenceLengths),
@@ -471,8 +485,8 @@ func ExtractText(text string) Metrics {
 		TypeTokenRatio:           typeTokenRatio,
 		SentenceCount:            len(sentences),
 		CharacterCount:           characterCount,
-		LexicalFrequencies:       lexicalFrequencies(prose, jpTokens),
-		CharNgrams:               charBigrams(prose),
+		LexicalFrequencies:       lexicalFrequencies(maskedProse, jpTokens),
+		CharNgrams:               charBigrams(maskedProse),
 		POSNgrams:                posNgrams(jpTokens),
 	}
 }
