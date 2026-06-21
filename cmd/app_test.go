@@ -163,6 +163,7 @@ func TestCheckJSONOutput(t *testing.T) {
 			Z         float64 `json:"z"`
 			Direction string  `json:"direction"`
 		} `json:"segments"`
+		SegmentStyleDrift float64 `json:"segment_style_drift"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
 		t.Fatalf("check --format json did not emit valid JSON: %v\n%s", err, stdout)
@@ -203,6 +204,11 @@ func TestCheckJSONOutput(t *testing.T) {
 	}
 	if payload.Segments[0].Feature != "polite sentence-ending ratio" {
 		t.Fatalf("expected register drift to lead the localization, got %q", payload.Segments[0].Feature)
+	}
+	// The register-flipped draft strays in every paragraph, so the median
+	// paragraph drift aggregate must be present and clearly positive.
+	if payload.SegmentStyleDrift <= 0 {
+		t.Fatalf("expected a positive segment_style_drift for the register-flipped draft, got %.3f", payload.SegmentStyleDrift)
 	}
 }
 

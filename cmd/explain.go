@@ -54,6 +54,9 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 	}
 
 	writeLine(w)
+	if explanation.SegmentStyleDrift > 0 {
+		writef(w, "Typical paragraph drift (median): %.1fσ\n", explanation.SegmentStyleDrift)
+	}
 	if len(explanation.Segments) == 0 {
 		// Reported only in the detailed view, so silence here is informative, not a
 		// gap: no single paragraph holds an editable, paragraph-local drift worth
@@ -76,15 +79,16 @@ func renderExplanationText(w io.Writer, author string, explanation profile.Expla
 func renderExplanationJSON(w io.Writer, author string, explanation profile.Explanation, warnings []term.Warning) error {
 	high, low := splitDrifts(explanation.Drifts)
 	payload := explanationJSON{
-		Author:         author,
-		Similarity:     explanation.Similarity,
-		SelfSimilarity: toAnchorJSON(explanation.SelfSimilarity),
-		ScoreDriver:    explanation.ScoreDriver,
-		ScoreNote:      explanation.ScoreNote,
-		HighLevelDrift: toDriftJSON(high),
-		LowLevelDrift:  toDriftJSON(low),
-		Segments:       toSegmentJSON(explanation.Segments),
-		TermWarnings:   toTermWarningJSON(warnings),
+		Author:            author,
+		Similarity:        explanation.Similarity,
+		SelfSimilarity:    toAnchorJSON(explanation.SelfSimilarity),
+		ScoreDriver:       explanation.ScoreDriver,
+		ScoreNote:         explanation.ScoreNote,
+		HighLevelDrift:    toDriftJSON(high),
+		LowLevelDrift:     toDriftJSON(low),
+		Segments:          toSegmentJSON(explanation.Segments),
+		SegmentStyleDrift: round4(explanation.SegmentStyleDrift),
+		TermWarnings:      toTermWarningJSON(warnings),
 	}
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
@@ -92,14 +96,19 @@ func renderExplanationJSON(w io.Writer, author string, explanation profile.Expla
 }
 
 type explanationJSON struct {
-	Author         string             `json:"author"`
-	Similarity     int                `json:"similarity"`
+	Author         string                `json:"author"`
+	Similarity     int                   `json:"similarity"`
 	SelfSimilarity *similarityAnchorJSON `json:"self_similarity_anchor,omitempty"`
-	ScoreDriver    string             `json:"score_driver,omitempty"`
-	ScoreNote      string             `json:"score_note,omitempty"`
-	HighLevelDrift []featureDriftJSON `json:"high_level_drift"`
-	LowLevelDrift  []featureDriftJSON `json:"low_level_drift"`
-	Segments       []segmentJSON      `json:"segments"`
+	ScoreDriver    string                `json:"score_driver,omitempty"`
+	ScoreNote      string                `json:"score_note,omitempty"`
+	HighLevelDrift []featureDriftJSON    `json:"high_level_drift"`
+	LowLevelDrift  []featureDriftJSON    `json:"low_level_drift"`
+	Segments       []segmentJSON         `json:"segments"`
+	// SegmentStyleDrift is the median per-paragraph localizable drift (mean z of
+	// register, script, and sentence-shape features). It is a robust, document-level
+	// companion to the worst-paragraph list in Segments and is reported for insight
+	// only — it never affects similarity. Always present so the shape is stable.
+	SegmentStyleDrift float64 `json:"segment_style_drift"`
 	// TermWarnings reports notation deviations (a non-preferred surface in the
 	// draft). It is a separate layer from the similarity score and never affects
 	// it. Always present (empty array, not null) so the shape is stable.

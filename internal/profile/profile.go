@@ -204,6 +204,13 @@ type Explanation struct {
 	ScoreDriver    string
 	ScoreNote      string
 	SelfSimilarity *SimilarityAnchor
+	// SegmentStyleDrift is the median, across the document's prose paragraphs, of
+	// each paragraph's localizable drift (the mean z of its register, script, and
+	// sentence-shape features against the author). It summarizes how far a typical
+	// paragraph strays — a robust counterpart to the single worst paragraph in
+	// Segments. It is reported for insight only and never feeds Similarity, so the
+	// headline score is unchanged by it.
+	SegmentStyleDrift float64
 }
 
 const (
@@ -272,11 +279,12 @@ func Explain(reference feature.Distribution, target feature.Metrics, segments []
 		similarity = similarityFromBreakdown(breakdown)
 	}
 	return Explanation{
-		Similarity:  similarity,
-		Drifts:      prioritize(drifts),
-		Segments:    locateSegmentDrift(reference, segments, flags),
-		ScoreDriver: breakdown.driver(),
-		ScoreNote:   explanationScoreNote,
+		Similarity:        similarity,
+		Drifts:            prioritize(drifts),
+		Segments:          locateSegmentDrift(reference, segments, flags),
+		ScoreDriver:       breakdown.driver(),
+		ScoreNote:         explanationScoreNote,
+		SegmentStyleDrift: segmentStyleDrift(reference, segments, flags),
 	}
 }
 
@@ -291,12 +299,13 @@ func ExplainRecord(record Record, target feature.Metrics, segments []feature.Seg
 		similarity = calibratedSimilarityFromMeanZ(breakdown.meanZ, record.SelfSimilarity)
 	}
 	return Explanation{
-		Similarity:     similarity,
-		Drifts:         prioritize(drifts),
-		Segments:       locateSegmentDrift(record.Distribution, segments, flags),
-		ScoreDriver:    breakdown.driver(),
-		ScoreNote:      explanationScoreNote,
-		SelfSimilarity: calibratedSelfSimilarityAnchor(record.SelfSimilarity),
+		Similarity:        similarity,
+		Drifts:            prioritize(drifts),
+		Segments:          locateSegmentDrift(record.Distribution, segments, flags),
+		ScoreDriver:       breakdown.driver(),
+		ScoreNote:         explanationScoreNote,
+		SelfSimilarity:    calibratedSelfSimilarityAnchor(record.SelfSimilarity),
+		SegmentStyleDrift: segmentStyleDrift(record.Distribution, segments, flags),
 	}
 }
 
@@ -647,6 +656,32 @@ func locateSegmentDrift(reference feature.Distribution, segments []feature.Segme
 		out = out[:segmentExplainLimit]
 	}
 	return out
+}
+
+// segmentStyleDrift summarizes how far a typical paragraph strays from the author,
+// as the median over the document's prose paragraphs of each paragraph's
+// localizable drift (the mean z of its register, script, and sentence-shape
+// features). It reuses the same localizable feature subset and per-paragraph
+// minimum length as locateSegmentDrift, so the two agree on which paragraphs
+// count, but reduces them to one robust figure rather than naming the single
+// worst one. It is informational only — no caller feeds it into Similarity — so a
+// document with too few prose paragraphs to judge simply returns 0.
+func segmentStyleDrift(reference feature.Distribution, segments []feature.Segment, flags config.Features) float64 {
+	if len(segments) == 0 {
+		return 0
+	}
+	drifts := make([]float64, 0, len(segments))
+	for _, segment := range segments {
+		if segment.Metrics.CharacterCount < minSegmentContentRunes {
+			continue
+		}
+		drifts = append(drifts, DocumentDivergence(reference, segment.Metrics, flags))
+	}
+	if len(drifts) == 0 {
+		return 0
+	}
+	sort.Float64s(drifts)
+	return median(drifts)
 }
 
 // everySpec selects every feature; it is the include predicate for whole-document

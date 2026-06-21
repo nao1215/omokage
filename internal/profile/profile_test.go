@@ -630,6 +630,48 @@ func abs(n int) int {
 	return n
 }
 
+// TestSegmentStyleDriftRanksAndStaysOutOfScoring checks the v2 paragraph-level
+// aggregate: a draft whose paragraphs stray further from the author yields a
+// larger median paragraph drift than a matching draft, and the figure is reported
+// without changing the headline similarity (it never feeds scoring).
+func TestSegmentStyleDriftRanksAndStaysOutOfScoring(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	polite := []string{
+		"今日は朝から雨が降っています。傘を持って出かけました。電車はとても混んでいました。",
+		"昨日は友人と食事に行きました。料理はどれも美味しかったです。また行きたいと思います。",
+		"週末は近くの公園を散歩しました。空気が澄んでいて気持ちが良かったです。",
+		"新しい本を買いました。内容がとても面白くて一気に読み終えました。",
+		"先週は仕事が忙しかったです。それでも毎日きちんと休めました。",
+	}
+	dist := distributionFromTexts(polite)
+
+	matchText := "今朝は少し肌寒い天気でした。温かいお茶を飲みながら新聞を読みました。穏やかな時間が流れていきました。\n\n" +
+		"昼からは近所を歩きました。商店街はいつもより賑わっていました。季節の移ろいを感じられて嬉しかったです。"
+	driftText := "本日は降雨である。会議資料を作成した。結論を整理し、対応を決定した。\n\n" +
+		"システムを再起動した。ログを確認した。異常はなかった。処理を継続する。"
+
+	matchExpl := Explain(dist, feature.ExtractText(matchText), feature.ExtractSegments(matchText), flags)
+	driftExpl := Explain(dist, feature.ExtractText(driftText), feature.ExtractSegments(driftText), flags)
+
+	if driftExpl.SegmentStyleDrift <= matchExpl.SegmentStyleDrift {
+		t.Fatalf("a register/voice-shifted draft should have a larger median paragraph drift: match=%.3f drift=%.3f",
+			matchExpl.SegmentStyleDrift, driftExpl.SegmentStyleDrift)
+	}
+
+	// The aggregate is informational: the similarity must equal the score computed
+	// without segments at all, so it provably never feeds scoring.
+	noSegments := Explain(dist, feature.ExtractText(driftText), nil, flags)
+	if driftExpl.Similarity != noSegments.Similarity {
+		t.Fatalf("segment_style_drift must not change similarity: with=%d without=%d",
+			driftExpl.Similarity, noSegments.Similarity)
+	}
+	if noSegments.SegmentStyleDrift != 0 {
+		t.Fatalf("with no segments the aggregate should be 0, got %.3f", noSegments.SegmentStyleDrift)
+	}
+}
+
 func distributionFromTexts(texts []string) feature.Distribution {
 	perDoc := make([]feature.Metrics, 0, len(texts))
 	for _, text := range texts {

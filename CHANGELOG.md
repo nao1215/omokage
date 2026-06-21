@@ -7,6 +7,16 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Added
+
+- `check --explain` / `check --format json` now report `segment_style_drift`, the
+  median per-paragraph localizable drift (register, script balance, and
+  sentence-shape features). It is a robust, document-level companion to the
+  worst-paragraph list — "how far does a typical paragraph stray" rather than only
+  the single worst one — and is reported for insight only: it never affects the
+  similarity score. The JSON field is additive, so existing consumers are
+  unaffected.
+
 ### Changed
 
 - Topic-heavy technical tokens — repository names (`owner/repo`), dotted
