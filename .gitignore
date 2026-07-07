@@ -37,3 +37,7 @@ omokage
 /omokage.toml
 /profiles/
 /cache/
+
+# Intermediate covdata for `make coverage` (unit + e2e merge); the final
+# coverage.out / coverage.html are already covered by the rules above.
+/.coverage/

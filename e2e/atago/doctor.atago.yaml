@@ -1,0 +1,84 @@
+# The `doctor` contract: rate a corpus for training without training anything,
+# and say what to fix. It has to read a corpus, judge its reliability
+# (good/fair/weak), and — crucially — write nothing, which `sandbox_home` +
+# `changes: created/modified/deleted []` verifies rather than assumes. The weak
+# corpus is a throwaway fixture of short documents so the diagnostic path is
+# exercised on data the repo does not have to carry. Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage doctor contract
+
+scenarios:
+  - name: a solid corpus rates good and doctor writes nothing
+    steps:
+      - run:
+          sandbox_home: true
+          shell: true
+          command: omokage doctor "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Reliability: good"
+              - "No problems found"
+              - "not writing quality"
+          # doctor is read-only: nothing created in the workdir or the sandboxed HOME.
+          changes:
+            created: []
+            modified: []
+            deleted: []
+
+  - name: a thin corpus rates weak and names what to fix with an action
+    steps:
+      - fixture:
+          file: weak/a.md
+          content: |
+            A short note.
+      - fixture:
+          file: weak/b.md
+          content: |
+            Another short note.
+      - fixture:
+          file: weak/c.md
+          content: |
+            One more short note.
+      - run:
+          command: omokage doctor weak
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Reliability: weak"
+              - "Findings:"
+              # A finding is not just a complaint: it points at the fix with an arrow.
+              - "→"
+              - "documents"
+
+  - name: the JSON report carries the reliability and findings as data
+    steps:
+      - fixture:
+          file: weak/a.md
+          content: |
+            A short note.
+      - fixture:
+          file: weak/b.md
+          content: |
+            Another short note.
+      - fixture:
+          file: weak/c.md
+          content: |
+            One more short note.
+      - run:
+          command: omokage doctor --format json weak
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: $.reliability
+              equals: "weak"
+      - assert:
+          stdout:
+            json:
+              path: $.findings[0].action
+              matches: "."

@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e bench lint clean tools demo help
+.PHONY: build test test-e2e test-e2e-atago coverage bench lint clean tools demo help
 
 APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
@@ -24,6 +24,12 @@ test: ## Run tests with coverage output
 
 test-e2e: build ## Run shellspec end-to-end tests against the built binary
 	shellspec --shell sh
+
+test-e2e-atago: ## Run atago end-to-end tests (builds omokage in a HOME sandbox)
+	sh e2e/run.sh
+
+coverage: ## Combine unit + atago E2E coverage into coverage.out (needs atago)
+	sh scripts/coverage.sh
 
 bench: ## Run Go benchmarks for the hot paths
 	env GOOS=$(GOOS) $(GO_TEST) -bench=. -benchmem -run='^$$' ./internal/...
