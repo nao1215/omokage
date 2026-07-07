@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-07
+
 ### Added
 
 - `check --explain` / `check --format json` now report `segment_style_drift`, the
