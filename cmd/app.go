@@ -518,6 +518,13 @@ func (a *App) runCheck(args []string) int {
 	a.warnFeatureVersion(record)
 	a.warnSelfSimilarityCalibration(record)
 
+	// A URL where a local FILE is expected is rejected by name, exactly as train
+	// and doctor do, instead of being joined onto the working directory and
+	// surfacing as a confusing "no such file" after the "://" is mangled.
+	if looksLikeURL(flagSet.Arg(0)) {
+		writeLine(a.stderr, urlInputError(flagSet.Arg(0)))
+		return 1
+	}
 	targetPath, err := resolvePath(a.workDir, flagSet.Arg(0))
 	if err != nil {
 		writeLine(a.stderr, err)
@@ -643,6 +650,15 @@ func (a *App) runDiff(args []string) int {
 	features, ok := a.featuresOrDefault(scopeF)
 	if !ok {
 		return 1
+	}
+
+	// Reject a URL for either operand by name, as train and doctor do, rather
+	// than letting it fall through to a mangled-path "no such file".
+	for _, arg := range []string{flagSet.Arg(0), flagSet.Arg(1)} {
+		if looksLikeURL(arg) {
+			writeLine(a.stderr, urlInputError(arg))
+			return 1
+		}
 	}
 
 	leftPath, err := resolvePath(a.workDir, flagSet.Arg(0))
@@ -1272,7 +1288,7 @@ func gatherTrainingInputs(workDir string, inputs []string) (sources, files []str
 	seenInput := make(map[string]bool, len(inputs))
 	for _, raw := range inputs {
 		if looksLikeURL(raw) {
-			return nil, nil, fmt.Errorf("URL inputs are not supported: %s (omokage trains from local files only; save the page as a .md or .txt file and pass that path instead)", raw)
+			return nil, nil, urlInputError(raw)
 		}
 		abs, resolveErr := resolvePath(workDir, raw)
 		if resolveErr != nil {
@@ -1342,9 +1358,18 @@ func realPath(path string) string {
 	return path
 }
 
-// looksLikeURL reports whether an input is a URL rather than a local path, so
-// train can reject it with a clear, dedicated message instead of letting it fall
-// through to a confusing "input not found". It matches an RFC 3986 scheme
+// urlInputError is the shared, by-name rejection for a URL passed where a local
+// path is expected. Every command that reads files (train, doctor, check, diff)
+// returns it so the guidance is identical: omokage never fetches the network, so
+// a URL is a user mistake caught with a clear message instead of a confusing
+// "no such file" after the "://" is mangled into a path.
+func urlInputError(raw string) error {
+	return fmt.Errorf("URL inputs are not supported: %s (omokage reads local files only; save the page as a .md or .txt file and pass that path instead)", raw)
+}
+
+// looksLikeURL reports whether an input is a URL rather than a local path, so a
+// command can reject it with a clear, dedicated message instead of letting it
+// fall through to a confusing "input not found". It matches an RFC 3986 scheme
 // followed by "://" (http://, https://, ftp://, file://, s3://, …), which also
 // covers credential-bearing forms like https://user:pass@host/page that omokage
 // would never fetch.

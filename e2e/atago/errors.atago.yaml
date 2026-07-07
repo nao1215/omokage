@@ -129,6 +129,52 @@ scenarios:
               - "URL inputs are not supported"
               - "local files only"
 
+  - name: "input: check rejects a URL target by name, like train"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      # check reads a single local FILE; a URL is the same user mistake train
+      # guards, so it must fail by name rather than as a mangled "no such file".
+      - run:
+          command: omokage check --author me https://example.com/draft.md
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains:
+              - "URL inputs are not supported"
+              - "local files only"
+
+  - name: "input: diff rejects a URL for either operand"
+    steps:
+      # diff needs no store, and either operand being a URL is rejected up front.
+      - run:
+          shell: true
+          command: omokage diff https://example.com/a.md "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains: "URL inputs are not supported"
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" ftp://example.com/b.md
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains: "URL inputs are not supported"
+
   - name: "input: an unsupported extension is refused with the allowed set"
     steps:
       - fixture:
