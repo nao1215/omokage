@@ -165,6 +165,59 @@ func TestRunDiffValidation(t *testing.T) {
 	}
 }
 
+// TestRunCheckRejectsURL pins that check refuses a URL target by name, the same
+// contract train and doctor already honor, instead of joining it onto the work
+// directory and failing with a mangled "no such file" path.
+func TestRunCheckRejectsURL(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir()
+	writeTestFile(t, filepath.Join(workDir, "posts", "one.md"), "# Title\n\nI write short notes. However, I still use markdown.\n")
+	writeTestFile(t, filepath.Join(workDir, "posts", "two.txt"), "そして今日は静かです。だから文章は短めです。")
+	if code, _, stderr := runApp(t, workDir, "init"); code != 0 {
+		t.Fatalf("init failed: %s", stderr)
+	}
+	if code, _, stderr := runApp(t, workDir, "train", "--author", "me", "posts"); code != 0 {
+		t.Fatalf("train failed: %s", stderr)
+	}
+
+	code, stdout, stderr := runApp(t, workDir, "check", "--author", "me", "https://example.com/post.md")
+	if code != 1 {
+		t.Fatalf("expected exit 1 for a URL target, got %d (stderr=%q)", code, stderr)
+	}
+	if !strings.Contains(stderr, "URL inputs are not supported") {
+		t.Fatalf("expected a URL-not-supported error, got %q", stderr)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("expected clean stdout on error, got %q", stdout)
+	}
+}
+
+// TestRunDiffRejectsURL pins the same by-name URL rejection for either diff
+// operand. diff needs no project, and the guard fires before the files are read.
+func TestRunDiffRejectsURL(t *testing.T) {
+	t.Parallel()
+
+	workDir := t.TempDir()
+	writeTestFile(t, filepath.Join(workDir, "a.md"), "# A\n\nそして文章です。だから続きます。\n")
+
+	for _, args := range [][]string{
+		{"diff", "https://example.com/a.md", "a.md"},
+		{"diff", "a.md", "ftp://example.com/b.txt"},
+	} {
+		code, stdout, stderr := runApp(t, workDir, args...)
+		if code != 1 {
+			t.Fatalf("%v: expected exit 1, got %d (stderr=%q)", args, code, stderr)
+		}
+		if !strings.Contains(stderr, "URL inputs are not supported") {
+			t.Fatalf("%v: expected a URL-not-supported error, got %q", args, stderr)
+		}
+		if strings.TrimSpace(stdout) != "" {
+			t.Fatalf("%v: expected clean stdout on error, got %q", args, stdout)
+		}
+	}
+}
+
 func TestRunListRejectsExtraArgs(t *testing.T) {
 	t.Parallel()
 

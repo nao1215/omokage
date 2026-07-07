@@ -39,6 +39,14 @@ and per-release binaries and notes are published from git tags by GoReleaser.
   describe a profile differently, so profiles trained by an older omokage warn
   until retrained.
 
+### Fixed
+
+- `check` and `diff` now reject a URL argument by name, the same way `train` and
+  `doctor` already do, instead of joining it onto the working directory and
+  failing with a confusing `open .../https:/…: no such file`. All four commands
+  share one message ("URL inputs are not supported: … omokage reads local files
+  only …") so a URL passed anywhere a local path is expected fails identically.
+
 ## [0.5.0] - 2026-06-12
 
 ### Added
