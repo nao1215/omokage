@@ -1,0 +1,183 @@
+# The `check` contract: it scores how close a draft sits to a trained voice.
+# The core relations are metamorphic and differential, pinned here with concrete
+# thresholds because atago asserts fixed outputs (the example scores are stable:
+# the voice-preserving draft ~91, the stiff rewrite 0). A draft that keeps the
+# voice must score far above one that loses it; English prose must score low
+# against a Japanese profile; and the author-resolution rules must never guess.
+# Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage check contract
+
+scenarios:
+  - name: a voice-keeping draft scores far higher than a voice-losing one
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      # Metamorphic: same idea, one in the trained voice, one rewritten stiff.
+      # The kept-voice draft sits near the author's own self-similarity band.
+      - run:
+          shell: true
+          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: $.similarity
+              gt: 50
+      # The stiff rewrite drops to the floor.
+      - run:
+          shell: true
+          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: $.similarity
+              lt: 40
+
+  - name: score-only emits just the integer for a keeping draft
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --score-only "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          # A bare integer 0-100 on the first (only) line, nothing else: the
+          # shell-pipeline mode. line:1 selects the line without its trailing newline.
+          stdout:
+            line: 1
+            matches: "^[0-9]{1,3}$"
+          stderr:
+            empty: true
+
+  - name: a single trained profile is resolved without --author
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: me"
+
+  - name: English prose scores low against a Japanese profile
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author ja "$OMOKAGE_EXAMPLES/ja/posts"
+      - assert:
+          exit_code: 0
+      # Differential across languages: a mismatched script collapses the score.
+      - run:
+          shell: true
+          command: omokage check --author ja --format json "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: $.similarity
+              lt: 20
+
+  - name: --explain leads with the editable high-level drift
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --author me --explain "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "High-level style differences"
+              - "Paragraphs that drift most:"
+
+  - name: --format json emits a machine-readable report with reference stats
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: $.author
+              equals: "me"
+      - assert:
+          stdout:
+            json:
+              path: $.high_level_drift[0].priority
+              equals: 1
+
+  - name: a default author set at train time resolves a bare check
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      # Two profiles would be ambiguous, but --default names one, so a bare
+      # check resolves it instead of erroring.
+      - run:
+          shell: true
+          command: omokage train --author me --default "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author other "$OMOKAGE_EXAMPLES/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: me"

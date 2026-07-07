@@ -1,0 +1,59 @@
+# The `diff` contract: compare two files directly, with no init, training, or
+# profile. Every scenario runs in a fresh workdir with no omokage.toml, which is
+# itself the assertion that diff needs no store. The relations pinned are
+# metamorphic: a file against itself is 100%, and the score is symmetric while
+# the per-feature direction flips (higher <-> lower) when the two files swap
+# roles. Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage diff contract
+
+scenarios:
+  - name: a file compared against itself is 100% similar
+    steps:
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Similarity: 100%"
+              - "no significant stylistic drift detected"
+
+  - name: the similarity score is symmetric under swapping the two files
+    steps:
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            # A is the reference here, so B's wider sentences read as "higher".
+            contains:
+              - "Similarity: 81%"
+              - "sentence length variance is higher than reference"
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            # Same score, but with the roles swapped the same feature now reads
+            # "lower" — the direction is relative to whichever file is reference.
+            contains:
+              - "Similarity: 81%"
+              - "sentence length variance is lower than reference"
+
+  - name: diff names both files it compared
+    steps:
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Reference:"
+              - "Target:"

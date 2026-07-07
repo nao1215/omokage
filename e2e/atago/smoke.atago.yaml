@@ -1,0 +1,79 @@
+# Black-box smoke of the omokage binary: the root help, versioning, the unknown
+# command path, and one full train -> check round trip. The deeper contract of
+# each subcommand lives in the sibling specs (check/diff/doctor/lifecycle/errors);
+# this file only proves the binary starts, dispatches, and completes the happy
+# path end to end. Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage smoke
+
+scenarios:
+  - name: reports its version on the stdout stream
+    steps:
+      - run:
+          command: omokage --version
+      - assert:
+          exit_code: 0
+          stdout:
+            matches: "^omokage "
+          stderr:
+            empty: true
+
+  - name: bare invocation prints the root help and succeeds
+    steps:
+      - run:
+          command: omokage
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "omokage <command> [arguments]"
+              - "Commands:"
+
+  - name: an unknown command fails and still shows the usage
+    steps:
+      - run:
+          command: omokage frobnicate
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "unknown command: frobnicate"
+          stdout:
+            contains: "Commands:"
+
+  - name: help COMMAND is the same screen as COMMAND --help
+    steps:
+      - run:
+          command: omokage help check
+      - assert:
+          exit_code: 0
+          # Usage screens print on stderr; stdout stays clean for piping.
+          stderr:
+            contains: "Usage: omokage check"
+
+  - name: train then check completes the documented happy path
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - 'Trained author "me" from 8 files.'
+              - "Corpus reliability: good."
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Author: me"
+              - "Similarity:"
+              - "Differences:"

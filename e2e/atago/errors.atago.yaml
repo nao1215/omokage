@@ -1,0 +1,208 @@
+# The negative space, grouped by the kind of failure. omokage reports every
+# error on stderr with exit 1 and leaves stdout clean, and each message names
+# both what went wrong and how to fix it. These scenarios pin that contract per
+# category — usage errors (a malformed invocation) and input errors (a bad or
+# missing corpus/target) — so a regression that swallows an error, drops the
+# actionable hint, or leaks a diagnostic onto stdout turns a scenario red.
+# Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage error contract
+
+scenarios:
+  # --- Usage errors: the invocation itself is malformed -----------------------
+
+  - name: "usage: train without --author is rejected with its usage"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains:
+              - "missing --author"
+              - "Usage: omokage train"
+
+  - name: "usage: diff with one file names the missing operand"
+    steps:
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains:
+              - "missing FILE_B"
+              - "Usage: omokage diff"
+
+  - name: "usage: --score-only cannot combine with --explain"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --score-only --explain "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains: "--score-only cannot be combined"
+
+  - name: "usage: an unknown --format is rejected by name"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --author me --format yaml "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "unknown --format"
+
+  # --- Input errors: the corpus or target is missing or unreadable ------------
+
+  - name: "input: check before init points at how to create a store"
+    steps:
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stdout:
+            empty: true
+          stderr:
+            contains:
+              - "project not found"
+              - "omokage init"
+
+  - name: "input: train on a nonexistent path reports it by name"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me ./no-such-dir
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "input not found"
+
+  - name: "input: a URL is rejected by name, not mangled into a path error"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me https://example.com/post.md
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "URL inputs are not supported"
+              - "local files only"
+
+  - name: "input: an unsupported extension is refused with the allowed set"
+    steps:
+      - fixture:
+          file: notes.rtf
+          content: |
+            not markdown
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me notes.rtf
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "only .md and .txt"
+
+  - name: "input: an empty corpus directory trains nothing and says so"
+    steps:
+      - fixture:
+          file: empty/.keep
+          content: ""
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me empty
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "no supported files found"
+
+  - name: "input: checking an untrained author names the missing profile"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check --author ghost "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "profile not found"
+
+  - name: "input: a bare check with several profiles refuses to guess"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author you "$OMOKAGE_EXAMPLES/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "multiple profiles"
+              - "--author"

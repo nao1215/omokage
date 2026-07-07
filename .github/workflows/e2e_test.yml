@@ -38,3 +38,36 @@ jobs:
 
       - name: Run shellspec end-to-end tests
         run: shellspec --shell sh
+
+  atago:
+    name: atago (binary e2e)
+
+    strategy:
+      matrix:
+        os:
+          - "ubuntu-latest"
+          - "macos-latest"
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Install atago
+        uses: nao1215/setup-atago@v0.1.1
+        with:
+          version: v0.7.0
+
+      # The hermetic runner builds omokage and runs the atago suite in a
+      # temp-backed HOME/profile-store sandbox, so local and CI execution are
+      # identical. These specs assert the same binary contract the shellspec
+      # suite does, but through atago's declarative state/exit-code/stream
+      # assertions and its combined-coverage instrumentation.
+      - name: Run atago end-to-end tests
+        run: make test-e2e-atago

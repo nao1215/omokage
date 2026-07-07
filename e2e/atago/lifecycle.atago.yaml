@@ -1,0 +1,178 @@
+# State transitions of a profile store: what `init`, `train`, `rename`, and
+# `remove` create, modify, and delete on disk, and how `list`/`show` read it
+# back. The filesystem side effects are pinned with `changes:` (content-based,
+# exhaustive for the fields it sets) rather than described in prose, and
+# `sandbox_home: true` routes HOME into the tracked workdir so an accidental
+# write outside the project store would surface as an unexpected change.
+# Run with: e2e/run.sh
+version: "1"
+
+suite:
+  name: omokage store lifecycle
+
+scenarios:
+  - name: init creates exactly the project store and touches nothing else
+    steps:
+      - run:
+          sandbox_home: true
+          command: omokage init
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Initialized omokage project."
+              - "Config:"
+              - "Profiles:"
+              - "Cache:"
+          # omokage.toml is the only file init writes; profiles/ and cache/ are
+          # created empty. modified/deleted are empty, proving init neither
+          # rewrites existing files nor pollutes the sandboxed HOME.
+          changes:
+            created:
+              - omokage.toml
+            modified: []
+            deleted: []
+      - run:
+          shell: true
+          command: test -d profiles && test -d cache
+      - assert:
+          exit_code: 0
+
+  - name: init refuses to overwrite an existing store
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "already exists"
+
+  - name: train writes one profile database named for the author
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+          changes:
+            created:
+              - profiles/me.db
+      - run:
+          command: omokage list
+      - assert:
+          exit_code: 0
+          stdout:
+            equals: "me"
+
+  - name: list --long reports provenance for each author
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author blog "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage list --long
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "AUTHOR"
+              - "FILES"
+              - "blog"
+      - run:
+          command: omokage show --author blog
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Author: blog"
+              - "Files: 8"
+              - "Reliability: good"
+
+  - name: rename moves the profile and the old name disappears
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage rename --author me --to watashi
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Renamed author "me" to "watashi".'
+          # The rename is a create+delete on disk, not a rewrite of me.db.
+          changes:
+            created:
+              - profiles/watashi.db
+            deleted:
+              - profiles/me.db
+      - run:
+          command: omokage list
+      - assert:
+          exit_code: 0
+          stdout:
+            equals: "watashi"
+
+  - name: remove deletes the profile database
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          shell: true
+          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage remove --author me
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Removed author "me".'
+          changes:
+            deleted:
+              - profiles/me.db
+      - run:
+          command: omokage list
+      - assert:
+          exit_code: 0
+          stdout:
+            empty: true
+
+  - name: init --global writes to the global store, not the local directory
+    steps:
+      # OMOKAGE_TEST_GLOBAL is a sandboxed global home outside the tracked
+      # workdir (set by e2e/run.sh), so the store lands there. The local working
+      # directory stays untouched — no omokage.toml here — which
+      # `changes: created: []` verifies rather than assumes.
+      - run:
+          shell: true
+          command: env OMOKAGE_HOME="$OMOKAGE_TEST_GLOBAL" omokage init --global
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Initialized omokage global store."
+          changes:
+            created: []
+            modified: []
+            deleted: []
