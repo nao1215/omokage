@@ -4,6 +4,7 @@
 ![Coverage](https://raw.githubusercontent.com/nao1215/octocovs-central-repo/main/badges/nao1215/omokage/coverage.svg)
 [![Go Reference](https://pkg.go.dev/badge/github.com/nao1215/omokage.svg)](https://pkg.go.dev/github.com/nao1215/omokage)
 ![GitHub](https://img.shields.io/github/license/nao1215/omokage)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/nao1215/omokage/total)](https://github.com/nao1215/omokage/releases)
 
 <p align="center">
   <img src="doc/img/omokage-icon.jpg" alt="omokage" width="320">
