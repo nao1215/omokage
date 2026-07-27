@@ -28,7 +28,7 @@ jobs:
       - name: Install atago
         uses: nao1215/setup-atago@v0.1.1
         with:
-          version: v0.15.0
+          version: v0.16.0
 
       # Combines unit-test coverage with self-hosted E2E coverage (the atago
       # suite runs a `go build -cover` omokage and collects covdata via
