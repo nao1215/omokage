@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785152129416,
+  "lastUpdate": 1785853283445,
   "repoUrl": "https://github.com/nao1215/omokage",
   "entries": {
     "Benchmark": [
@@ -5160,6 +5160,150 @@ window.BENCHMARK_DATA = {
             "value": 812,
             "unit": "allocs/op",
             "extra": "4971 times\n4 procs"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "n.chika156@gmail.com",
+            "name": "CHIKAMATSU Naohiro",
+            "username": "nao1215"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a3297282eb60f8cac6789e775c60088bb479c1b2",
+          "message": "Merge pull request #24 from nao1215/chore/bump-atago-v0.17.0\n\nchore(ci): bump atago to v0.17.0",
+          "timestamp": "2026-08-04T23:20:28+09:00",
+          "tree_id": "adc380dc042e5c024c72ef30182a325ae5b161fe",
+          "url": "https://github.com/nao1215/omokage/commit/a3297282eb60f8cac6789e775c60088bb479c1b2"
+        },
+        "date": 1785853282901,
+        "tool": "go",
+        "benches": [
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature)",
+            "value": 2174044,
+            "unit": "ns/op\t  795618 B/op\t    5679 allocs/op",
+            "extra": "496 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 2174044,
+            "unit": "ns/op",
+            "extra": "496 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 795618,
+            "unit": "B/op",
+            "extra": "496 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExtractText (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 5679,
+            "unit": "allocs/op",
+            "extra": "496 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature)",
+            "value": 3602373,
+            "unit": "ns/op\t   81520 B/op\t      50 allocs/op",
+            "extra": "332 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - ns/op",
+            "value": 3602373,
+            "unit": "ns/op",
+            "extra": "332 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - B/op",
+            "value": 81520,
+            "unit": "B/op",
+            "extra": "332 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkAggregate (github.com/nao1215/omokage/internal/feature) - allocs/op",
+            "value": 50,
+            "unit": "allocs/op",
+            "extra": "332 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile)",
+            "value": 225342,
+            "unit": "ns/op\t   95353 B/op\t     746 allocs/op",
+            "extra": "5265 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 225342,
+            "unit": "ns/op",
+            "extra": "5265 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 95353,
+            "unit": "B/op",
+            "extra": "5265 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkScore (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 746,
+            "unit": "allocs/op",
+            "extra": "5265 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile)",
+            "value": 225255,
+            "unit": "ns/op\t   82640 B/op\t     744 allocs/op",
+            "extra": "5301 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 225255,
+            "unit": "ns/op",
+            "extra": "5301 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 82640,
+            "unit": "B/op",
+            "extra": "5301 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkCompare (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 744,
+            "unit": "allocs/op",
+            "extra": "5301 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile)",
+            "value": 292376,
+            "unit": "ns/op\t  238970 B/op\t     812 allocs/op",
+            "extra": "4579 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - ns/op",
+            "value": 292376,
+            "unit": "ns/op",
+            "extra": "4579 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - B/op",
+            "value": 238970,
+            "unit": "B/op",
+            "extra": "4579 times\n4 procs"
+          },
+          {
+            "name": "BenchmarkExplain (github.com/nao1215/omokage/internal/profile) - allocs/op",
+            "value": 812,
+            "unit": "allocs/op",
+            "extra": "4579 times\n4 procs"
           }
         ]
       }
