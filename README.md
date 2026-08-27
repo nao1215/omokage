@@ -28,6 +28,12 @@ It is built for an LLM as much as for a person: an agent can run `check` after e
 go install github.com/nao1215/omokage@latest
 ```
 
+On Arch Linux, [`omokage-bin`](https://aur.archlinux.org/packages/omokage-bin) is community-maintained and installs the release binary:
+
+```shell
+yay -S omokage-bin   # or: paru -S omokage-bin
+```
+
 Runs on Windows, macOS, and Linux. Building from source needs Go 1.25 or later.
 
 ## Quick start
