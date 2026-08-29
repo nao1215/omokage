@@ -7,6 +7,11 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies updated (`modernc.org/sqlite` 1.51.0 to 1.57.0, `golang.org/x/sys`, `github.com/mattn/go-isatty`), holding `modernc.org/libc` at the version `modernc.org/sqlite` declares. The `go` directive stays at 1.25.0.
+- The end-to-end suite runs against atago v0.21.0, the GitHub Actions pins move to v7, and the unit-test matrix ceiling tracks the newest Go release instead of a pinned 1.26.
+
 ## [0.6.0] - 2026-07-07
 
 ### Added
