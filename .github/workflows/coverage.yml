@@ -18,17 +18,17 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1"
+          go-version: "stable"
           check-latest: true
 
       - name: Install atago
         uses: nao1215/setup-atago@v0.1.1
         with:
-          version: v0.20.0
+          version: v0.21.0
 
       # Combines unit-test coverage with self-hosted E2E coverage (the atago
       # suite runs a `go build -cover` omokage and collects covdata via

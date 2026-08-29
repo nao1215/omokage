@@ -21,12 +21,12 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version-file: "go.mod"
+          go-version: "stable"
 
       - name: Install shellspec
         run: |
@@ -52,17 +52,17 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version-file: "go.mod"
+          go-version: "stable"
 
       - name: Install atago
         uses: nao1215/setup-atago@v0.1.1
         with:
-          version: v0.20.0
+          version: v0.21.0
 
       # The hermetic runner builds omokage and runs the atago suite in a
       # temp-backed HOME/profile-store sandbox, so local and CI execution are
