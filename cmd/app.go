@@ -480,8 +480,19 @@ func (a *App) runCheck(args []string) int {
 	case 0:
 		return a.usageError(flagSet, "missing FILE")
 	default:
-		flagSet.Usage()
-		return 1
+		// A shell glob is the usual way to arrive here (`omokage check *.md`),
+		// and a bare usage block does not say that the count was the problem.
+		return a.usageError(flagSet, fmt.Sprintf("check takes exactly one FILE, got %d", flagSet.NArg()))
+	}
+
+	// Before any store work: a directory is the wrong shape of argument whether
+	// or not a profile exists, and answering "omokage project not found" for it
+	// sends the reader to init instead of to train.
+	if resolved, err := resolvePath(a.workDir, flagSet.Arg(0)); err == nil {
+		if dirErr := a.rejectDirectory(flagSet.Arg(0), resolved, "check"); dirErr != nil {
+			writeLine(a.stderr, dirErr)
+			return 1
+		}
 	}
 	if *format != formatText && *format != formatJSON {
 		writef(a.stderr, "unknown --format %q: want text or json\n", *format)
@@ -642,8 +653,7 @@ func (a *App) runDiff(args []string) int {
 	case 1:
 		return a.usageError(flagSet, "missing FILE_B")
 	default:
-		flagSet.Usage()
-		return 1
+		return a.usageError(flagSet, fmt.Sprintf("diff takes exactly two files, got %d", flagSet.NArg()))
 	}
 
 	// diff only needs the feature set, not a profile, so it works without any
@@ -1244,6 +1254,23 @@ func parseArgs(flagSet *flag.FlagSet, args []string) (code int, ok bool) {
 // usageError reports a missing or invalid argument directly on stderr, then prints
 // the command's usage and returns exit code 1. Centralizing it keeps the "what is
 // missing" wording and the message-then-usage layout consistent across commands.
+// rejectDirectory refuses a directory where a single document is expected, and
+// names train as the command that does take one (#19). Without it the directory
+// reached os.ReadFile and came back as `read ./corpus/: is a directory`, which
+// names a syscall rather than the thing to do instead — while train, the
+// command for a directory, has had an IsDir branch of its own all along.
+//
+// A stat failure is deliberately not an error here: a missing path is a better
+// message from the reader that follows, which already says which file it could
+// not open.
+func (a *App) rejectDirectory(raw, resolved, command string) error {
+	info, err := os.Stat(resolved)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	return fmt.Errorf("%s reads a single .md or .txt file; %s is a directory — use `omokage train` for a directory of documents", command, raw)
+}
+
 func (a *App) usageError(flagSet *flag.FlagSet, msg string) int {
 	writef(a.stderr, "%s\n\n", msg)
 	flagSet.Usage()

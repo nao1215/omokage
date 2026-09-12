@@ -45,6 +45,59 @@ scenarios:
               - "missing FILE_B"
               - "Usage: omokage diff"
 
+  # #19: the too-many-arguments paths fell through to a bare usage block, which
+  # is what `omokage check *.md` in a directory of notes produces.
+  - name: "usage: check with two files says how many it takes"
+    steps:
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "check takes exactly one FILE, got 2"
+              - "Usage: omokage check"
+
+  - name: "usage: diff with three files says how many it takes"
+    steps:
+      - run:
+          shell: true
+          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "diff takes exactly two files, got 3"
+              - "Usage: omokage diff"
+
+  - name: "usage: check on a directory points at train"
+    steps:
+      - run:
+          shell: true
+          command: omokage check "$OMOKAGE_EXAMPLES/en/posts"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "is a directory"
+              - "omokage train"
+
+  - name: "diff of two empty documents says there is nothing to measure"
+    steps:
+      - fixture:
+          file: empty.md
+          content: ""
+      - run:
+          command: omokage diff empty.md empty.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "no measurable text in either document"
+      - assert:
+          stdout:
+            not_contains: "no enabled features configured"
+
   - name: "usage: --score-only cannot combine with --explain"
     steps:
       - run:

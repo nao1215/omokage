@@ -757,6 +757,43 @@ func TestScoreWithNoEnabledFeatures(t *testing.T) {
 	if comparison.Similarity != 100 {
 		t.Fatalf("expected 100%% when no features are enabled, got %d", comparison.Similarity)
 	}
+	if comparison.Differences[0] != noEnabledFeatures {
+		t.Fatalf("a switched-off configuration should say so, got %q", comparison.Differences[0])
+	}
+}
+
+// TestEmptyDocumentsAreNotAConfigurationProblem is the regression for #19. A
+// feature that is zero in both documents is dropped as carrying no signal, so a
+// pair of empty documents drops every feature and lands in the same branch as a
+// configuration with every feature switched off. The two have different fixes,
+// so they say different things: Compare and ScoreRecord are covered alongside
+// Score, because the branch is copied into all three.
+func TestEmptyDocumentsAreNotAConfigurationProblem(t *testing.T) {
+	t.Parallel()
+
+	flags := config.Default("sample").Features
+	empty := feature.Metrics{}
+
+	got := Compare(empty, empty, flags)
+	if got.Differences[0] != noMeasurableText {
+		t.Errorf("Compare of two empty documents: got %q, want %q", got.Differences[0], noMeasurableText)
+	}
+
+	scored := Score(feature.Distribution{}, empty, flags)
+	if scored.Differences[0] != noMeasurableText {
+		t.Errorf("Score against an empty distribution: got %q, want %q", scored.Differences[0], noMeasurableText)
+	}
+
+	checked := ScoreRecord(Record{}, empty, flags)
+	if checked.Differences[0] != noMeasurableText {
+		t.Errorf("ScoreRecord against an empty profile: got %q, want %q", checked.Differences[0], noMeasurableText)
+	}
+
+	// The other side of the same branch still reads as a configuration problem.
+	off := Compare(empty, empty, config.Features{})
+	if off.Differences[0] != noEnabledFeatures {
+		t.Errorf("Compare with no features enabled: got %q, want %q", off.Differences[0], noEnabledFeatures)
+	}
 }
 
 func TestScoreSkipsDegenerateFeatures(t *testing.T) {
