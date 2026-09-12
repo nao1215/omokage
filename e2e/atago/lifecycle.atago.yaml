@@ -4,7 +4,7 @@
 # exhaustive for the fields it sets) rather than described in prose, and
 # `sandbox_home: true` routes HOME into the tracked workdir so an accidental
 # write outside the project store would surface as an unexpected change.
-# Run with: e2e/run.sh
+# Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -32,11 +32,14 @@ scenarios:
               - omokage.toml
             modified: []
             deleted: []
-      - run:
-          shell: true
-          command: test -d profiles && test -d cache
       - assert:
-          exit_code: 0
+          dir:
+            path: profiles
+            exists: true
+      - assert:
+          dir:
+            path: cache
+            exists: true
 
   - name: init refuses to overwrite an existing store
     steps:
@@ -58,8 +61,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
           changes:
@@ -79,8 +81,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author blog "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author blog "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
@@ -109,8 +110,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
@@ -139,8 +139,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
@@ -162,12 +161,13 @@ scenarios:
   - name: init --global writes to the global store, not the local directory
     steps:
       # OMOKAGE_TEST_GLOBAL is a sandboxed global home outside the tracked
-      # workdir (set by e2e/run.sh), so the store lands there. The local working
+      # workdir (set by e2e/runner), so the store lands there. The local working
       # directory stays untouched — no omokage.toml here — which
       # `changes: created: []` verifies rather than assumes.
       - run:
-          shell: true
-          command: env OMOKAGE_HOME="$OMOKAGE_TEST_GLOBAL" omokage init --global
+          command: omokage init --global
+          env:
+            OMOKAGE_HOME: "${env:OMOKAGE_TEST_GLOBAL}"
       - assert:
           exit_code: 0
           stdout:

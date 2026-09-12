@@ -28,12 +28,12 @@ echo ">> unit coverage -> ${cov}/unit"
 go test -count=1 -cover -covermode=atomic -coverpkg=./... ./... \
 	-args -test.gocoverdir="${cov}/unit"
 
-# 2. Self-hosted E2E via a coverage-instrumented omokage. e2e/run.sh builds
+# 2. Self-hosted E2E via a coverage-instrumented omokage. e2e/runner builds
 #    omokage with `go build -cover` when COVER is set and puts it first on PATH;
 #    atago forwards GOCOVERDIR to the omokage child processes, so each writes
 #    its own covdata into ${cov}/e2e.
 echo ">> e2e coverage -> ${cov}/e2e"
-COVER=1 GOCOVERDIR="${cov}/e2e" sh "${ROOT}/e2e/run.sh"
+(cd "${ROOT}" && COVER=1 GOCOVERDIR="${cov}/e2e" go run ./e2e/runner)
 
 # 3. Merge the raw covdata and render the combined text profile + reports.
 echo ">> merging unit + e2e covdata -> coverage.out"

@@ -39,6 +39,10 @@ jobs:
       - name: Run shellspec end-to-end tests
         run: shellspec --shell sh
 
+  # shellspec above stays on the two POSIX systems: it is a shell test runner,
+  # and making it work on Windows would mean testing Git Bash. The atago suite
+  # carries the same binary contract and bootstraps in Go, so it runs everywhere
+  # omokage is built for.
   atago:
     name: atago (binary e2e)
 
@@ -47,6 +51,7 @@ jobs:
         os:
           - "ubuntu-latest"
           - "macos-latest"
+          - "windows-latest"
       fail-fast: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -70,4 +75,4 @@ jobs:
       # suite does, but through atago's declarative state/exit-code/stream
       # assertions and its combined-coverage instrumentation.
       - name: Run atago end-to-end tests
-        run: make test-e2e-atago
+        run: go run ./e2e/runner

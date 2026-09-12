@@ -4,7 +4,7 @@
 # the voice-preserving draft ~91, the stiff rewrite 0). A draft that keeps the
 # voice must score far above one that loses it; English prose must score low
 # against a Japanese profile; and the author-resolution rules must never guess.
-# Run with: e2e/run.sh
+# Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -18,15 +18,13 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       # Metamorphic: same idea, one in the trained voice, one rewritten stiff.
       # The kept-voice draft sits near the author's own self-similarity band.
       - run:
-          shell: true
-          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --author me --format json "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -35,8 +33,7 @@ scenarios:
               gt: 50
       # The stiff rewrite drops to the floor.
       - run:
-          shell: true
-          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+          command: omokage check --author me --format json "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -51,13 +48,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --score-only "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --score-only "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           # A bare integer 0-100 on the first (only) line, nothing else: the
@@ -75,13 +70,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -94,14 +87,12 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author ja "$OMOKAGE_EXAMPLES/ja/posts"
+          command: omokage train --author ja "${env:OMOKAGE_EXAMPLES}/ja/posts"
       - assert:
           exit_code: 0
       # Differential across languages: a mismatched script collapses the score.
       - run:
-          shell: true
-          command: omokage check --author ja --format json "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --author ja --format json "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -116,13 +107,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --author me --explain "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+          command: omokage check --author me --explain "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -137,13 +126,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --author me --format json "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+          command: omokage check --author me --format json "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -165,18 +152,15 @@ scenarios:
       # Two profiles would be ambiguous, but --default names one, so a bare
       # check resolves it instead of erroring.
       - run:
-          shell: true
-          command: omokage train --author me --default "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me --default "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author other "$OMOKAGE_EXAMPLES/ja/posts"
+          command: omokage train --author other "${env:OMOKAGE_EXAMPLES}/ja/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
