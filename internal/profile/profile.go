@@ -249,6 +249,28 @@ const minSegmentContentRunes = 30
 // text is matching on one sentence, not on three that happen to agree.
 const noEnabledFeatures = "no enabled features configured"
 
+// noMeasurableText is the difference reported when every feature is switched on
+// and none of them found anything to measure, which is what two empty or
+// whitespace-only documents produce (#19). It used to answer with
+// noEnabledFeatures, blaming a configuration that was not the problem: the
+// features were enabled, and a feature that is zero in both documents is
+// dropped as carrying no signal, so an empty pair drops all of them and lands
+// in the same branch as a switched-off one.
+const noMeasurableText = "no measurable text in either document"
+
+// emptyComparisonReason says why a comparison found nothing to report: a
+// configuration with every feature switched off, or documents with nothing in
+// them. Both end in the same branch — no feature contributed a distance — and
+// the fix for each is different, so they cannot share a sentence.
+func emptyComparisonReason(flags config.Features) string {
+	for _, spec := range featureSpecs {
+		if spec.enabled(flags) {
+			return noMeasurableText
+		}
+	}
+	return noEnabledFeatures
+}
+
 // Score measures how closely a target document matches a learned author
 // distribution. Each feature is standardized against the author's own
 // per-document spread (a Burrows's-Delta-style z-score), so a target is judged
@@ -257,7 +279,7 @@ const noEnabledFeatures = "no enabled features configured"
 func Score(reference feature.Distribution, target feature.Metrics, flags config.Features) Comparison {
 	drifts := featureDrifts(reference, target, flags)
 	if len(drifts) == 0 {
-		return Comparison{Similarity: 100, Differences: []string{noEnabledFeatures}}
+		return Comparison{Similarity: 100, Differences: []string{emptyComparisonReason(flags)}}
 	}
 	return Comparison{
 		Similarity:  similarityFromDrifts(drifts),
@@ -270,7 +292,7 @@ func Score(reference feature.Distribution, target feature.Metrics, flags config.
 // for old or under-specified profiles.
 func ScoreRecord(record Record, target feature.Metrics, flags config.Features) Comparison {
 	drifts := featureDrifts(record.Distribution, target, flags)
-	return comparisonFromDrifts(drifts, record.SelfSimilarity)
+	return comparisonFromDrifts(drifts, record.SelfSimilarity, flags)
 }
 
 // Explain produces the rich, editor-facing view of the same comparison Score
@@ -508,11 +530,11 @@ func calibratedSimilarityFromMeanZ(meanZ float64, stats *SelfSimilarityStats) in
 	return clampPercent(int(math.Round(calibratedUpperScore - ratio*calibratedUpperScore)))
 }
 
-func comparisonFromDrifts(drifts []FeatureDrift, stats *SelfSimilarityStats) Comparison {
+func comparisonFromDrifts(drifts []FeatureDrift, stats *SelfSimilarityStats, flags config.Features) Comparison {
 	if len(drifts) == 0 {
 		return Comparison{
 			Similarity:     100,
-			Differences:    []string{noEnabledFeatures},
+			Differences:    []string{emptyComparisonReason(flags)},
 			SelfSimilarity: calibratedSelfSimilarityAnchor(stats),
 		}
 	}
@@ -837,7 +859,7 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 	}
 
 	if registerCount+otherCount+functionWordCount+charNgramCount+posNgramCount == 0 {
-		return Comparison{Similarity: 100, Differences: []string{noEnabledFeatures}}
+		return Comparison{Similarity: 100, Differences: []string{emptyComparisonReason(flags)}}
 	}
 
 	// Combine the groups the same way Score does so the diff stays consistent with

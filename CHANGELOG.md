@@ -7,6 +7,12 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Fixed
+
+- `check` and `diff` say how many files they take when given too many. Their zero-argument paths said `missing FILE`, but the too-many path fell through to a bare usage block — which is what `omokage check *.md` produces in a directory of notes, and the one message that does not say what happened.
+- `check` on a directory names it and points at `train`. It leaked `read ./corpus/: is a directory` straight from `os.ReadFile`, which names a syscall rather than the command that does take a directory. The check runs before any store work, so a directory no longer answers `omokage project not found` and send the reader to `init`.
+- Two documents with nothing in them are reported as having nothing to measure, rather than as a configuration with no features enabled. A feature that is zero in both documents is dropped as carrying no signal, so an empty pair drops all of them and landed in the branch meant for a switched-off configuration — a sentence whose fix is to edit a config file, for a run where every feature was on. The three paths that share that branch (`Compare`, `Score`, `ScoreRecord`) now choose between the two sentences by asking whether any feature is enabled at all.
+
 ### Changed
 
 - Dependencies updated (`modernc.org/sqlite` 1.51.0 to 1.57.0, `golang.org/x/sys`, `github.com/mattn/go-isatty`), holding `modernc.org/libc` at the version `modernc.org/sqlite` declares. The `go` directive stays at 1.25.0.
