@@ -13,6 +13,8 @@ import (
 // feature weights and still produce a comparison, exactly like a bare diff, so a
 // wrapper or habit that always adds --global is not a trap.
 func TestDiffGlobalWithoutStoreFallsBack(t *testing.T) {
+	t.Parallel()
+
 	workDir := t.TempDir()
 	writeTestFile(t, filepath.Join(workDir, "a.md"), "First file with plain prose. It has two sentences.")
 	writeTestFile(t, filepath.Join(workDir, "b.md"), "An entirely different second file. Its voice diverges.")
@@ -40,6 +42,8 @@ func TestDiffGlobalWithoutStoreFallsBack(t *testing.T) {
 // otherwise the README promise ("code blocks are removed before the features are
 // measured") holds only for backtick fences.
 func TestDiffIgnoresTildeFencedCode(t *testing.T) {
+	t.Parallel()
+
 	workDir := t.TempDir()
 	prose := "This is an ordinary English paragraph. It keeps two plain sentences.\n\n" +
 		"And a second paragraph that holds the same calm voice all the way through."
@@ -73,6 +77,8 @@ func TestDiffIgnoresTildeFencedCode(t *testing.T) {
 // intentional) but warns, naming the enclosing config, so a user does not
 // silently end up with a shadowing store that hides the profiles they expect.
 func TestInitNestedWarnsButSucceeds(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	if code, _, stderr := runApp(t, root, "init"); code != 0 {
 		t.Fatalf("init at root failed: %s", stderr)
@@ -96,6 +102,8 @@ func TestInitNestedWarnsButSucceeds(t *testing.T) {
 // TestInitFreshDoesNotWarn pins the other side: a plain init with no enclosing
 // store stays quiet, so the nested warning never fires spuriously.
 func TestInitFreshDoesNotWarn(t *testing.T) {
+	t.Parallel()
+
 	code, _, stderr := runApp(t, t.TempDir(), "init")
 	if code != 0 {
 		t.Fatalf("fresh init failed: %s", stderr)
@@ -110,6 +118,8 @@ func TestInitFreshDoesNotWarn(t *testing.T) {
 // holds in any timezone: it asserts the displayed string equals the local
 // rendering of the stored (UTC) time, not a hard-coded zone.
 func TestShowDisplaysLocalTime(t *testing.T) {
+	t.Parallel()
+
 	workDir := trainedProject(t)
 
 	record, err := storage.LoadProfile(filepath.Join(workDir, "profiles", "me.db"))

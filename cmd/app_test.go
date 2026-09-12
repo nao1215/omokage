@@ -143,9 +143,9 @@ func TestCheckJSONOutput(t *testing.T) {
 			High    int `json:"high"`
 			Samples int `json:"samples"`
 		} `json:"self_similarity_anchor"`
-		Driver     string `json:"score_driver"`
-		Note       string `json:"score_note"`
-		HighLevel  []struct {
+		Driver    string `json:"score_driver"`
+		Note      string `json:"score_note"`
+		HighLevel []struct {
 			Feature       string  `json:"feature"`
 			Category      string  `json:"category"`
 			Target        float64 `json:"target"`
