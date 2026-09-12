@@ -30,6 +30,11 @@ const (
 	formatJSON = "json"
 )
 
+// cmdHelp is the help subcommand's name. It is matched in three places -- the
+// dispatch, the `help <command>` branch inside it, and the no-arguments rule --
+// so the spelling lives here rather than in each of them.
+const cmdHelp = "help"
+
 // devVersion is the sentinel reported for an untagged local build.
 const devVersion = "dev"
 
@@ -97,10 +102,10 @@ func (a *App) Run(args []string) int {
 	}
 
 	switch args[0] {
-	case "help", "-h", "--help":
+	case cmdHelp, "-h", "--help":
 		// `omokage help` is the root help; `omokage help <command>` is the same as
 		// `omokage <command> --help`, so users can reach a command's usage either way.
-		if args[0] == "help" && len(args) > 1 {
+		if args[0] == cmdHelp && len(args) > 1 {
 			return a.runHelp(args[1:])
 		}
 		a.printRootHelp()
@@ -150,7 +155,7 @@ func (a *App) runHelp(args []string) int {
 		forwarded = append(forwarded, args...)
 		forwarded = append(forwarded, "--help")
 		return a.Run(forwarded)
-	case "help", "version":
+	case cmdHelp, "version":
 		// These have no flags and no per-command usage screen. Extra tokens after them
 		// are meaningless, so reject them rather than ignore them; a bare name points
 		// at the root help, which documents both.

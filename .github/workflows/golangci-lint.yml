@@ -1,0 +1,43 @@
+name: golangci-lint
+
+# reviewdog.yml also runs golangci-lint, but as an advisory reporter that only
+# leaves review comments at level "warning". That is not a gate: ten findings had
+# accumulated on main -- an unused function, two unformatted files, five tests
+# that never declared themselves parallel, and two repeated string literals --
+# each one reported on the pull request that introduced it and merged anyway.
+# This job fails the build instead.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  golangci-lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Pinned rather than "stable": a released golangci-lint embeds the
+      # go/types of the Go it was built with, so pointing it at a newer standard
+      # library takes the linter out entirely rather than reporting on this
+      # repository's code. The newer toolchains are covered by unit_test.yml,
+      # which compiles and runs the code instead of analyzing it.
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.25"
+
+      - name: Run golangci-lint as an enforced gate
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2

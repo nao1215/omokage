@@ -10,7 +10,9 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 ### Changed
 
 - Dependencies updated (`modernc.org/sqlite` 1.51.0 to 1.57.0, `golang.org/x/sys`, `github.com/mattn/go-isatty`), holding `modernc.org/libc` at the version `modernc.org/sqlite` declares. The `go` directive stays at 1.25.0.
-- The end-to-end suite runs against atago v0.21.0, the GitHub Actions pins move to v7, and the unit-test matrix ceiling tracks the newest Go release instead of a pinned 1.26.
+- The end-to-end suite runs against atago v0.22.0, the GitHub Actions pins move to v7, and the unit-test matrix ceiling tracks the newest Go release instead of a pinned 1.26.
+- `modernc.org/sqlite` 1.58.0 and `modernc.org/libc` 1.75.7 on 2026-09-12. The golang.org/x updates are not taken: that family now declares `go 1.26.0` and the floor here is 1.25.0.
+- golangci-lint runs as a gate rather than as a reviewdog comment. It was advisory at level `warning`, which is how ten findings reached main — an unused function, two unformatted files, five tests that never declared themselves parallel, and two repeated string literals. All ten are fixed in the same change: `combineCompareDrift` is deleted (its `WithCounts` sibling is what everything calls), the five regression tests declare `t.Parallel()` — they take their working directory and home as arguments, so nothing process-global stands in the way — and the two repeated literals become `cmdHelp` and `noEnabledFeatures`.
 
 ## [0.6.0] - 2026-07-07
 

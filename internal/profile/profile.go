@@ -214,8 +214,8 @@ type Explanation struct {
 }
 
 const (
-	calibratedMedianScore = 90
-	calibratedUpperScore  = 75
+	calibratedMedianScore  = 90
+	calibratedUpperScore   = 75
 	calibrationMedianFloor = 0.1
 	calibrationSpreadFloor = 0.05
 )
@@ -243,6 +243,12 @@ const segmentDriftThreshold = driftThreshold
 // localization pointed at real prose.
 const minSegmentContentRunes = 30
 
+// noEnabledFeatures is the single difference reported when every feature is
+// switched off. Three code paths answer with it -- scoring, the per-segment
+// report and the distribution-free comparison -- and a caller matching on the
+// text is matching on one sentence, not on three that happen to agree.
+const noEnabledFeatures = "no enabled features configured"
+
 // Score measures how closely a target document matches a learned author
 // distribution. Each feature is standardized against the author's own
 // per-document spread (a Burrows's-Delta-style z-score), so a target is judged
@@ -251,7 +257,7 @@ const minSegmentContentRunes = 30
 func Score(reference feature.Distribution, target feature.Metrics, flags config.Features) Comparison {
 	drifts := featureDrifts(reference, target, flags)
 	if len(drifts) == 0 {
-		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
+		return Comparison{Similarity: 100, Differences: []string{noEnabledFeatures}}
 	}
 	return Comparison{
 		Similarity:  similarityFromDrifts(drifts),
@@ -506,7 +512,7 @@ func comparisonFromDrifts(drifts []FeatureDrift, stats *SelfSimilarityStats) Com
 	if len(drifts) == 0 {
 		return Comparison{
 			Similarity:     100,
-			Differences:    []string{"no enabled features configured"},
+			Differences:    []string{noEnabledFeatures},
 			SelfSimilarity: calibratedSelfSimilarityAnchor(stats),
 		}
 	}
@@ -831,7 +837,7 @@ func Compare(reference feature.Metrics, target feature.Metrics, flags config.Fea
 	}
 
 	if registerCount+otherCount+functionWordCount+charNgramCount+posNgramCount == 0 {
-		return Comparison{Similarity: 100, Differences: []string{"no enabled features configured"}}
+		return Comparison{Similarity: 100, Differences: []string{noEnabledFeatures}}
 	}
 
 	// Combine the groups the same way Score does so the diff stays consistent with
@@ -981,18 +987,6 @@ const (
 	// meaningful part of how two documents differ, not just noise.
 	otherCompareWeight = 0.34
 )
-
-// combineCompareDrift mirrors combineDrift for the distribution-free diff path.
-// The lexical fingerprint leads (the equal-weight mean of the function-word and
-// n-gram distances), a register difference is added with a fixed weight, and the
-// remaining structural features contribute a moderate share.
-func combineCompareDrift(g groupDrift) float64 {
-	return combineCompareDriftWithCounts(g, groupCounts{
-		functionWord: boolCount(g.functionWord != 0),
-		charNgram:    boolCount(g.charNgram != 0),
-		posNgram:     boolCount(g.posNgram != 0),
-	})
-}
 
 func combineCompareDriftWithCounts(g groupDrift, counts groupCounts) float64 {
 	lexical := lexicalGroupMean(g, counts)
