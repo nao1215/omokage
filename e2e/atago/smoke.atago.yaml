@@ -2,7 +2,7 @@
 # command path, and one full train -> check round trip. The deeper contract of
 # each subcommand lives in the sibling specs (check/diff/doctor/lifecycle/errors);
 # this file only proves the binary starts, dispatches, and completes the happy
-# path end to end. Run with: e2e/run.sh
+# path end to end. Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -59,8 +59,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
           stdout:
@@ -68,8 +67,7 @@ scenarios:
               - 'Trained author "me" from 8 files.'
               - "Corpus reliability: good."
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:

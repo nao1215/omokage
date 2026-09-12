@@ -3,7 +3,7 @@
 # itself the assertion that diff needs no store. The relations pinned are
 # metamorphic: a file against itself is 100%, and the score is symmetric while
 # the per-feature direction flips (higher <-> lower) when the two files swap
-# roles. Run with: e2e/run.sh
+# roles. Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -13,8 +13,7 @@ scenarios:
   - name: a file compared against itself is 100% similar
     steps:
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -25,8 +24,7 @@ scenarios:
   - name: the similarity score is symmetric under swapping the two files
     steps:
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -35,8 +33,7 @@ scenarios:
               - "Similarity: 81%"
               - "sentence length variance is higher than reference"
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 0
           stdout:
@@ -49,8 +46,7 @@ scenarios:
   - name: diff names both files it compared
     steps:
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-lost-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-lost-voice.md"
       - assert:
           exit_code: 0
           stdout:

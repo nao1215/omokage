@@ -4,7 +4,7 @@
 # category — usage errors (a malformed invocation) and input errors (a bad or
 # missing corpus/target) — so a regression that swallows an error, drops the
 # actionable hint, or leaks a diagnostic onto stdout turns a scenario red.
-# Run with: e2e/run.sh
+# Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -20,8 +20,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 1
           stdout:
@@ -34,8 +33,7 @@ scenarios:
   - name: "usage: diff with one file names the missing operand"
     steps:
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stdout:
@@ -50,8 +48,7 @@ scenarios:
   - name: "usage: check with two files says how many it takes"
     steps:
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stderr:
@@ -62,8 +59,7 @@ scenarios:
   - name: "usage: diff with three files says how many it takes"
     steps:
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stderr:
@@ -74,8 +70,7 @@ scenarios:
   - name: "usage: check on a directory points at train"
     steps:
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 1
           stderr:
@@ -105,13 +100,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --score-only --explain "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --score-only --explain "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stdout:
@@ -126,13 +119,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --author me --format yaml "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --author me --format yaml "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stderr:
@@ -143,8 +134,7 @@ scenarios:
   - name: "input: check before init points at how to create a store"
     steps:
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stdout:
@@ -189,8 +179,7 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       # check reads a single local FILE; a URL is the same user mistake train
@@ -210,8 +199,7 @@ scenarios:
     steps:
       # diff needs no store, and either operand being a URL is rejected up front.
       - run:
-          shell: true
-          command: omokage diff https://example.com/a.md "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage diff https://example.com/a.md "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stdout:
@@ -219,8 +207,7 @@ scenarios:
           stderr:
             contains: "URL inputs are not supported"
       - run:
-          shell: true
-          command: omokage diff "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md" ftp://example.com/b.md
+          command: omokage diff "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md" ftp://example.com/b.md
       - assert:
           exit_code: 1
           stdout:
@@ -268,13 +255,11 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check --author ghost "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check --author ghost "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stderr:
@@ -287,18 +272,15 @@ scenarios:
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author me "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage train --author me "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage train --author you "$OMOKAGE_EXAMPLES/ja/posts"
+          command: omokage train --author you "${env:OMOKAGE_EXAMPLES}/ja/posts"
       - assert:
           exit_code: 0
       - run:
-          shell: true
-          command: omokage check "$OMOKAGE_EXAMPLES/en/draft-keeps-voice.md"
+          command: omokage check "${env:OMOKAGE_EXAMPLES}/en/draft-keeps-voice.md"
       - assert:
           exit_code: 1
           stderr:

@@ -26,7 +26,7 @@ test-e2e: build ## Run shellspec end-to-end tests against the built binary
 	shellspec --shell sh
 
 test-e2e-atago: ## Run atago end-to-end tests (builds omokage in a HOME sandbox)
-	sh e2e/run.sh
+	$(GO) run ./e2e/runner
 
 coverage: ## Combine unit + atago E2E coverage into coverage.out (needs atago)
 	sh scripts/coverage.sh

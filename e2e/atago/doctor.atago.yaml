@@ -3,7 +3,7 @@
 # (good/fair/weak), and — crucially — write nothing, which `sandbox_home` +
 # `changes: created/modified/deleted []` verifies rather than assumes. The weak
 # corpus is a throwaway fixture of short documents so the diagnostic path is
-# exercised on data the repo does not have to carry. Run with: e2e/run.sh
+# exercised on data the repo does not have to carry. Run with: make test-e2e-atago
 version: "1"
 
 suite:
@@ -14,8 +14,7 @@ scenarios:
     steps:
       - run:
           sandbox_home: true
-          shell: true
-          command: omokage doctor "$OMOKAGE_EXAMPLES/en/posts"
+          command: omokage doctor "${env:OMOKAGE_EXAMPLES}/en/posts"
       - assert:
           exit_code: 0
           stdout:
