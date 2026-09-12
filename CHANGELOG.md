@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-12
+
 ### Fixed
 
 - `check` and `diff` say how many files they take when given too many. Their zero-argument paths said `missing FILE`, but the too-many path fell through to a bare usage block — which is what `omokage check *.md` produces in a directory of notes, and the one message that does not say what happened.
