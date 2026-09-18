@@ -1,4 +1,4 @@
-.PHONY: build test test-e2e test-e2e-atago coverage bench lint clean tools demo help
+.PHONY: build test test-e2e test-e2e-atago coverage bench bench-compare lint clean tools demo help
 
 APP         = omokage
 VERSION     = $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
@@ -31,8 +31,11 @@ test-e2e-atago: ## Run atago end-to-end tests (builds omokage in a HOME sandbox)
 coverage: ## Combine unit + atago E2E coverage into coverage.out (needs atago)
 	sh scripts/coverage.sh
 
-bench: ## Run Go benchmarks for the hot paths
-	env GOOS=$(GOOS) $(GO_TEST) -bench=. -benchmem -run='^$$' ./internal/...
+bench: ## Measure omokage with the himorime suite in bench/ (requires himorime on PATH)
+	himorime run bench
+
+bench-compare: ## Compare main with the working tree on the himorime suite (BASE=main)
+	himorime compare --against $${BASE:-main} bench
 
 DEMO_BIN  = /tmp/omokage
 DEMO_DIR  = /tmp/omokage-demo
@@ -55,6 +58,7 @@ lint: ## Run golangci-lint
 tools: ## Install developer tools (linter, coverage, shellspec for e2e)
 	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	$(GO_INSTALL) github.com/k1LoW/octocov@latest
+	$(GO_INSTALL) github.com/nao1215/himorime@latest
 	curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
 
 .DEFAULT_GOAL := help
