@@ -21,7 +21,7 @@ jobs:
         # setup-go resolves "1" from its own manifest, which lags a fresh
         # release -- the pinned "1.26" ceiling had already fallen behind 1.27.
         go:
-          - "1.25"
+          - "1.26"
           - "stable"
       fail-fast: false
     runs-on: ${{ matrix.os }}

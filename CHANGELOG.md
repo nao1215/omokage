@@ -7,6 +7,10 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Building from source now needs Go 1.26 or later (was 1.25). golang.org/x/sys and modernc.org/libc, which this update takes along with modernc.org/sqlite v1.59.0, declare `go 1.26.0`, and Go 1.26 and 1.27 are the two releases the Go team still supports. Prebuilt binaries are unaffected.
+
 ## [0.6.1] - 2026-09-12
 
 ### Fixed
