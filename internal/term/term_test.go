@@ -356,3 +356,79 @@ func TestDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// toFullWidth maps printable ASCII (U+0021..U+007E) to its full-width form and
+// leaves every other rune unchanged. It is the inverse of foldWidth on that
+// range and lets the fuzzer build the ＤＢ spelling of any DB spelling.
+func toFullWidth(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '!' && r <= '~' {
+			r += 0xFEE0
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// FuzzNormalizeKey checks the normalized_key contract on arbitrary surfaces,
+// including invalid UTF-8 and every Unicode class the corpus may contain:
+//
+//   - the fold is idempotent, so a key never regroups when it is normalized
+//     again (profile keys are compared with freshly normalized draft surfaces),
+//   - a key never carries leading/trailing space, punctuation, or symbols,
+//   - the full-width spelling of any text shares the key of its ASCII spelling
+//     (ＤＢ and DB must land in one group).
+func FuzzNormalizeKey(f *testing.F) {
+	for _, seed := range []string{
+		"DB", "db", "ＤＢ", "(DB)", "API,", "HTTP", "データベース", "「優先度」",
+		"GoReleaser", " \t", "", "\xff", "İSTANBUL", "ǅ", "ＡＢＣ１２３", "～x～",
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, surface string) {
+		key := normalizeKey(surface)
+		if again := normalizeKey(key); again != key {
+			t.Fatalf("normalizeKey is not idempotent: %q -> %q -> %q", surface, key, again)
+		}
+		if key != strings.TrimFunc(key, isTrimmable) {
+			t.Fatalf("normalizeKey(%q) = %q keeps trimmable edges", surface, key)
+		}
+		if wide := normalizeKey(toFullWidth(surface)); wide != key {
+			t.Fatalf("full-width spelling changes the key: %q -> %q, %q -> %q",
+				surface, key, toFullWidth(surface), wide)
+		}
+	})
+}
+
+// FuzzScanCandidates checks the term candidate scanner on arbitrary prose: it
+// must not panic, every candidate must be a verbatim substring of the prose (the
+// warning excerpts point at it), and every candidate must be long enough and
+// have a non-empty normalized_key, so no empty or single-rune group is created.
+func FuzzScanCandidates(f *testing.F) {
+	for _, seed := range []string{
+		"データベースDBを使う。",
+		"ＤＢとDBとdbは同じ。",
+		"The API and the api (Application Programming Interface).",
+		"東京タワーの優先度は2026年に上がった。",
+		"a I 2026 v1.2.3",
+		"\xffDB\xfe",
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, prose string) {
+		for _, surface := range scanCandidates(prose) {
+			if !strings.Contains(prose, surface) {
+				t.Fatalf("candidate %q is not a substring of %q", surface, prose)
+			}
+			if len([]rune(surface)) < min(minASCIILen, minJapaneseLen) {
+				t.Fatalf("candidate %q is shorter than the minimum length", surface)
+			}
+			if normalizeKey(surface) == "" {
+				t.Fatalf("candidate %q normalizes to an empty key", surface)
+			}
+		}
+	})
+}

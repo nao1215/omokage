@@ -7,6 +7,10 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Fixed
+
+- The polite and plain register ratios of Japanese prose no longer both read 1 when sentences end with a half-width `!` `?` `.` or a full-width `．`. The morphological split counted those as sentence ends while the ratio divides by the `。！？` count, so `散歩に行きます!公園に行く!` scored fully polite and fully plain at once; both sides now count only `。！？`.
+
 ## [0.6.2] - 2026-09-21
 
 ### Changed

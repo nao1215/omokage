@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -138,6 +139,28 @@ func TestPlainEndingDetectsOpenClassPredicates(t *testing.T) {
 	question := ExtractText("もう行きますか。")
 	if question.PoliteEndingRatio <= 0 || question.PlainEndingRatio != 0 {
 		t.Fatalf("expected polite ending for trailing-か sentence, got polite=%f plain=%f", question.PoliteEndingRatio, question.PlainEndingRatio)
+	}
+}
+
+// TestRegisterRatiosShareOneDenominator pins the fix for a FuzzExtractText
+// finding: the morphological register split sentences on half-width !?. and on
+// ．, while the ratio divides by the 。！？ count, so a document ending sentences
+// with a half-width ! reported polite=1 and plain=1 at once. Both ratios now count
+// the same sentences, so their sum never exceeds 1.
+func TestRegisterRatiosShareOneDenominator(t *testing.T) {
+	t.Parallel()
+
+	for _, text := range []string{
+		"散歩に行きます!公園に行く!",
+		"散歩に行きます?公園に行く?",
+		"散歩に行きます．公園に行く．",
+		"散歩に行きます.公園に行く.",
+		"散歩に行きます!公園に行く。",
+	} {
+		m := ExtractText(text)
+		if sum := m.PoliteEndingRatio + m.PlainEndingRatio; sum > 1 {
+			t.Errorf("%q: polite=%f plain=%f sum to %f, want at most 1", text, m.PoliteEndingRatio, m.PlainEndingRatio, sum)
+		}
 	}
 }
 
@@ -478,5 +501,107 @@ func TestStripNonProse(t *testing.T) {
 		if !contains(got, want) {
 			t.Errorf("StripNonProse dropped prose %q from: %q", want, got)
 		}
+	}
+}
+
+// maxFuzzTextBytes bounds a fuzzed document so the morphological analyzer keeps
+// the fuzzer's throughput useful; the properties do not depend on length.
+const maxFuzzTextBytes = 4096
+
+// FuzzExtractText feeds arbitrary documents (Markdown, mixed scripts, invalid
+// UTF-8, stray code fences) to ExtractText, the function every profile and check
+// score is built from. It checks that:
+//
+//   - it does not panic, and every scalar is finite and non-negative,
+//   - every ratio feature stays in [0, 1], and so do the ratios that share a
+//     denominator when summed (kanji+hiragana+katakana, polite+plain),
+//   - the n-gram and function-word frequency vectors hold finite values in [0, 1],
+//   - an empty document yields the zero Metrics,
+//   - converting the line endings to CRLF does not change any feature, since a
+//     Windows checkout of the same post must score identically.
+func FuzzExtractText(f *testing.F) {
+	for _, seed := range []string{
+		"# Heading\n\nそして文章です。だから続きます。\n- one\n- two\n",
+		"今日は晴れです。散歩に行きます。とても良い一日でした。",
+		"今日は晴れである。散歩に行く。とても良い一日だった。",
+		"This is a plain English sentence. It has no Japanese endings.",
+		"The build moved from 1.2.3 to 1.10.0 today. See example.com or v2.1 for details.",
+		"もう行きますか。",
+		"```go\nfunc main() {}\n\n```\n\n本文です。\n",
+		"| a | b |\n|---|---|\n> quote\n1. first\n",
+		"",
+		" \n\t\n",
+		"\xff\xfe。",
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, text string) {
+		if len(text) > maxFuzzTextBytes {
+			t.Skip("document too large for a useful fuzz iteration")
+		}
+		m := ExtractText(text)
+		checkMetricsInvariants(t, text, m)
+
+		if !strings.Contains(text, "\r") {
+			crlf := ExtractText(strings.ReplaceAll(text, "\n", "\r\n"))
+			if !reflect.DeepEqual(m, crlf) {
+				t.Fatalf("CRLF line endings change the features of %q\nLF:   %+v\nCRLF: %+v", text, m, crlf)
+			}
+		}
+	})
+}
+
+func checkMetricsInvariants(t *testing.T, text string, m Metrics) {
+	t.Helper()
+
+	const eps = 1e-9
+	nonNegative := map[string]float64{
+		"AverageSentenceLength":   m.AverageSentenceLength,
+		"SentenceLengthVariance":  m.SentenceLengthVariance,
+		"ParagraphLengthVariance": m.ParagraphLengthVariance,
+	}
+	for name, v := range nonNegative {
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+			t.Fatalf("%s = %v for %q, want finite and non-negative", name, v, text)
+		}
+	}
+	ratios := map[string]float64{
+		"PunctuationFrequency":     m.PunctuationFrequency,
+		"NewlineFrequency":         m.NewlineFrequency,
+		"BulletRatio":              m.BulletRatio,
+		"ConjunctionFrequency":     m.ConjunctionFrequency,
+		"KanjiRatio":               m.KanjiRatio,
+		"HiraganaRatio":            m.HiraganaRatio,
+		"KatakanaRatio":            m.KatakanaRatio,
+		"MarkdownStructureDensity": m.MarkdownStructureDensity,
+		"PoliteEndingRatio":        m.PoliteEndingRatio,
+		"PlainEndingRatio":         m.PlainEndingRatio,
+		"TypeTokenRatio":           m.TypeTokenRatio,
+		"script ratio sum":         m.KanjiRatio + m.HiraganaRatio + m.KatakanaRatio,
+		"register ratio sum":       m.PoliteEndingRatio + m.PlainEndingRatio,
+	}
+	for name, v := range ratios {
+		if math.IsNaN(v) || v < 0 || v > 1+eps {
+			t.Fatalf("%s = %v for %q, want within [0, 1]", name, v, text)
+		}
+	}
+	if m.SentenceCount < 0 || m.CharacterCount < 0 {
+		t.Fatalf("negative counts for %q: sentences=%d characters=%d", text, m.SentenceCount, m.CharacterCount)
+	}
+	vectors := map[string]map[string]float64{
+		"LexicalFrequencies": m.LexicalFrequencies,
+		"CharNgrams":         m.CharNgrams,
+		"POSNgrams":          m.POSNgrams,
+	}
+	for name, vec := range vectors {
+		for key, v := range vec {
+			if math.IsNaN(v) || v < 0 || v > 1+eps {
+				t.Fatalf("%s[%q] = %v for %q, want within [0, 1]", name, key, v, text)
+			}
+		}
+	}
+	if strings.TrimSpace(text) == "" && !reflect.DeepEqual(m, Metrics{}) {
+		t.Fatalf("blank document %q yields non-zero metrics %+v", text, m)
 	}
 }
