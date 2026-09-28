@@ -40,7 +40,7 @@ Runs on Windows, macOS, and Linux. Building from source needs Go 1.26.6 or later
 
 ## Verifying release integrity
 
-Releases after v0.6.2 ship supply-chain metadata so you can verify what you download:
+Releases from v0.6.3 on ship supply-chain metadata so you can verify what you download:
 
 - Signed checksums: `checksums.txt` is signed with [cosign](https://github.com/sigstore/cosign) (keyless), producing `checksums.txt.sigstore.json`.
 - SBOM: an SPDX Software Bill of Materials is attached to each release archive as `<archive>.sbom.json`.
