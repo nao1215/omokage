@@ -2,7 +2,7 @@
 
 ## Development Environment
 
-- Go 1.26 or later
+- Go 1.26.6 or later
 - `make`
 - `git`
 

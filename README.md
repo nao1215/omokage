@@ -36,7 +36,7 @@ On Arch Linux, [`omokage-bin`](https://aur.archlinux.org/packages/omokage-bin) i
 yay -S omokage-bin   # or: paru -S omokage-bin
 ```
 
-Runs on Windows, macOS, and Linux. Building from source needs Go 1.26 or later.
+Runs on Windows, macOS, and Linux. Building from source needs Go 1.26.6 or later.
 
 ## Quick start
 
