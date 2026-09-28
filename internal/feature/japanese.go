@@ -230,10 +230,16 @@ func conjunctionStatsJP(tokens []jpToken) (conj int, total int) {
 	return conj, total
 }
 
-// terminators marks sentence-final punctuation surfaces.
+// isSentenceTerminator marks the sentence-final punctuation surfaces the register
+// feature splits on. It is exactly the Japanese full stops (。！？) that
+// ExtractText counts for the register denominator. Counting a half-width !?. or
+// a full-width period here as well let one document end more sentences than the
+// denominator allowed, so the polite and plain ratios could each clamp to 1 and
+// sum to 2; a Latin period is also the one the denominator deliberately ignores
+// because it appears inside versions, decimals, and domains.
 func isSentenceTerminator(surface string) bool {
 	switch surface {
-	case "。", "！", "？", "．", "!", "?", ".":
+	case "。", "！", "？":
 		return true
 	default:
 		return false
