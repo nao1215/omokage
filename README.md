@@ -7,6 +7,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/nao1215/omokage.svg)](https://pkg.go.dev/github.com/nao1215/omokage)
 ![GitHub](https://img.shields.io/github/license/nao1215/omokage)
 [![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/nao1215/omokage/total)](https://github.com/nao1215/omokage/releases)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/omokage/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/omokage)
 
 <p align="center">
   <img src="doc/img/omokage-icon.jpg" alt="omokage" width="320">
