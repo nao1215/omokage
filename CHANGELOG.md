@@ -7,6 +7,10 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Releases are signed and ship with SLSA build provenance. `checksums.txt` is signed with cosign (keyless), producing `checksums.txt.sigstore.json`, and SLSA build provenance is attached as `multiple.intoto.jsonl`, which `slsa-verifier verify-artifact` checks against a downloaded archive. The release run verifies every published archive against it before finishing.
+
 ### Fixed
 
 - The polite and plain register ratios of Japanese prose no longer both read 1 when sentences end with a half-width `!` `?` `.` or a full-width `．`. The morphological split counted those as sentence ends while the ratio divides by the `。！？` count, so `散歩に行きます!公園に行く!` scored fully polite and fully plain at once; both sides now count only `。！？`.
