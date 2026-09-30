@@ -66,7 +66,7 @@ func isASCIILike(r rune) bool {
 // proper-noun cores; hiragana is excluded because runs of hiragana are usually
 // grammatical (particles, verb/adjective inflection) rather than terms.
 func isJapaneseTermRune(r rune) bool {
-	if unicode.Is(unicode.Han, r) || unicode.Is(unicode.Katakana, r) {
+	if unicode.IsLetter(r) && (unicode.Is(unicode.Han, r) || unicode.Is(unicode.Katakana, r)) {
 		return true
 	}
 	return r == 'ー' // U+30FC prolonged sound mark, common inside katakana words
