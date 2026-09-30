@@ -414,6 +414,7 @@ func FuzzScanCandidates(f *testing.F) {
 		"東京タワーの優先度は2026年に上がった。",
 		"a I 2026 v1.2.3",
 		"\xffDB\xfe",
+		"㌼㌿",
 	} {
 		f.Add(seed)
 	}
