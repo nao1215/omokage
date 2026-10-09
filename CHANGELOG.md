@@ -7,6 +7,10 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+### Changed
+
+- Dependencies: modernc.org/sqlite v1.60.1 (modernc.org/libc v1.77.1).
+
 ## [0.6.3] - 2026-09-28
 
 ### Changed
