@@ -44,3 +44,4 @@ omokage
 
 # GoReleaser output (goreleaser release --snapshot).
 /dist/
+/third_party_licenses/
