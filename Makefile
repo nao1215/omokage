@@ -56,7 +56,7 @@ lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml
 
 tools: ## Install developer tools (linter, coverage, shellspec for e2e)
-	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 	$(GO_INSTALL) github.com/k1LoW/octocov@latest
 	$(GO_INSTALL) github.com/nao1215/himorime@latest
 	curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
