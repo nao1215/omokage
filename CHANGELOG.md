@@ -7,6 +7,8 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-09
+
 ### Changed
 
 - Dependencies: modernc.org/sqlite v1.61.1 (modernc.org/libc v1.79.0), golang.org/x/sys v0.49.0.
