@@ -9,7 +9,7 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 
 ### Changed
 
-- Dependencies: modernc.org/sqlite v1.60.1 (modernc.org/libc v1.79.0), golang.org/x/sys v0.49.0.
+- Dependencies: modernc.org/sqlite v1.61.1 (modernc.org/libc v1.79.0), golang.org/x/sys v0.49.0.
 - Release archives and Linux packages now include the license texts of the linked dependencies under THIRD_PARTY_LICENSES/. CI checks dependency licenses on Linux, Windows, and macOS.
 
 ## [0.6.3] - 2026-09-28
