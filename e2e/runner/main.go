@@ -93,7 +93,7 @@ func run(ctx context.Context, args []string) error {
 		atagoArgs = append(atagoArgs, filepath.Join(repoRoot, "e2e", "atago"))
 	}
 
-	atago := exec.CommandContext(ctx, "atago", atagoArgs...) //nolint:gosec // a fixed command with author-supplied spec targets
+	atago := exec.CommandContext(ctx, "atago", atagoArgs...) // #nosec G204 G702 -- a fixed command with author-supplied spec targets
 	atago.Dir = repoRoot
 	atago.Stdout = os.Stdout
 	atago.Stderr = os.Stderr
