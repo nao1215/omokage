@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run for the previous commit, so
+# superseded runs do not hold the account's shared job slots.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   unit_test:
     strategy:
@@ -24,7 +30,7 @@ jobs:
         # setup-go resolves "1" from its own manifest, which lags a fresh
         # release -- the pinned "1.26" ceiling had already fallen behind 1.27.
         go:
-          - "1.26"
+          - "1.26.6"
           - "stable"
       fail-fast: false
     runs-on: ${{ matrix.os }}
