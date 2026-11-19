@@ -51,6 +51,17 @@ go test ./internal/profile -run '^TestProperty' -rapid.checks=20000
 go test -run '^$' -fuzz '^FuzzExtractText$' -fuzztime 1m ./internal/feature
 ```
 
+## Mutation testing
+
+[gremlins](https://github.com/go-gremlins/gremlins) v0.6.0 changes one expression at a time and reruns the tests; a mutant that no test notices (lived) points at code whose result nothing checks. `.github/workflows/mutation.yml` mutates the whole module every Sunday and, on a pull request, only the lines it changes. Each mutant runs under an 8 GiB address-space cap (`ulimit -v`) so a mutant that allocates without bound is killed instead of taking the runner down; 4 GiB is too little for the `cmd` tests, which load the kagome dictionary and SQLite.
+
+```shell
+ulimit -v 8388608
+gremlins unleash --workers 2 --timeout-coefficient 30 .
+```
+
+Baseline, 2026-11-19, the whole module: 547 killed, 344 lived, 5 timed out, 135 not covered; test efficacy (killed / (killed + lived)) 61.39%, mutator coverage 86.84%. Most lived mutants are in the floating-point scoring of `internal/profile/profile.go` (100) and `internal/feature/extractor.go` (93), where a changed constant or comparison moves a score without crossing the bounds the tests assert. The score is a record to compare later runs with, not a gate: some lived mutants are equivalent to the original code.
+
 ## Benchmarks
 
 ```shell
