@@ -6,6 +6,7 @@ require (
 	github.com/ikawaha/kagome-dict/ipa v1.2.6
 	github.com/ikawaha/kagome/v2 v2.11.1
 	modernc.org/sqlite v1.62.0
+	pgregory.net/rapid v1.3.0
 )
 
 require (

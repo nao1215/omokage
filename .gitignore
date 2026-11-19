@@ -45,3 +45,6 @@ omokage
 # GoReleaser output (goreleaser release --snapshot).
 /dist/
 /third_party_licenses/
+
+# rapid writes a failing case here; reproduce it with the printed seed instead
+testdata/rapid/
