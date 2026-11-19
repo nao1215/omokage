@@ -88,6 +88,7 @@ func TestExtractTextIgnoresALeadingByteOrderMark(t *testing.T) {
 		{name: "a heading on the first line", text: "# Title\n\nThis is a sentence. And another one.\n"},
 		{name: "a code fence on the first line", text: "```go\nfunc main() {}\n```\n\n本文です。続きを書きます。\n"},
 		{name: "a bullet on the first line", text: "- first item\n- second item\n\n文です。\n"},
+		{name: "YAML front matter", text: "---\ntitle: \"記事\"\ndate: 2026-11-19\n---\n\n本文です。続きを書きます。\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
