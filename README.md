@@ -223,6 +223,20 @@ omokage looks at style, not meaning: it cannot tell whether a draft is correct, 
 
 omokage (面影) is written with 面 (face) and 影 (shadow, trace): the remembered image of someone, the likeness that comes back to mind. The name is borrowed from [Omokage](https://www.toraya-group.co.jp/products/collections/yokan-omokage), a yokan by Toraya that I like.
 
+## Testing
+
+| Technique | Bug class caught here |
+|---|---|
+| [Unit tests](internal) | Wrong features, scores and storage of each package on Linux, macOS and Windows |
+| [End-to-end tests](e2e/atago) | Changed output, errors and exit codes of the real `omokage` binary |
+| [Regression corpus](cmd/debimate_regression_test.go) | Real blog posts whose genre, topic and voice the score stops telling apart |
+| [Property-based tests](internal/profile/property_test.go) | Scores outside 0-100 and a draft that does not match itself |
+| [Metamorphic tests](internal/profile/property_test.go) | Profiles that depend on the order of the corpus, and metrics moved by CRLF or a byte order mark |
+| [Fuzzing](internal/feature/extractor_test.go) | Panics on malformed Markdown, configuration and terms |
+| [Benchmarks](bench) | Slower `train` and `check` on large corpora |
+
+The commands, files and CI jobs for each are in [doc/testing.md](doc/testing.md).
+
 ## Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
