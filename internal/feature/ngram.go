@@ -310,13 +310,14 @@ var (
 // StripNonProse removes everything that is not natural-language prose — YAML
 // front matter, fenced and inline code, Markdown images, Markdown link URLs (the
 // visible link text is kept), raw URLs, HTML tags, and HTML entities — and
-// returns the remaining prose with CRLF normalized. It is the single chokepoint
+// returns the remaining prose with CRLF normalized and a leading byte order
+// mark removed. It is the single chokepoint
 // the feature extractor and term extraction both run through, so they measure the
 // same prose. Code shares vocabulary and character sequences across authors and
 // would otherwise drown out the natural-language signal in technical writing;
 // markup and metadata would manufacture drift from layout rather than voice.
 func StripNonProse(text string) string {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = normalizeText(text)
 	text = frontMatterPattern.ReplaceAllString(text, "")
 	text = stripCode(text)
 	text = imagePattern.ReplaceAllString(text, " ")
@@ -325,6 +326,20 @@ func StripNonProse(text string) string {
 	text = htmlTagPattern.ReplaceAllString(text, " ")
 	text = htmlEntityPattern.ReplaceAllString(text, " ")
 	return text
+}
+
+// utf8BOM is the byte order mark some editors (Notepad and other Windows
+// editors among them) write at the start of a UTF-8 file.
+const utf8BOM = "\ufeff"
+
+// normalizeText removes a leading UTF-8 byte order mark and turns CRLF line
+// endings into LF. The mark is not part of the text: left in, it is counted as
+// a character of the first sentence and of the first character n-grams, and it
+// hides a heading, list item, code fence or front matter on the first line
+// from the patterns that recognize them.
+func normalizeText(text string) string {
+	text = strings.TrimPrefix(text, utf8BOM)
+	return strings.ReplaceAll(text, "\r\n", "\n")
 }
 
 // stripCode removes fenced code blocks and inline code spans from the text. Both
