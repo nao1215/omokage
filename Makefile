@@ -22,11 +22,10 @@ test: ## Run tests with coverage output
 	env GOOS=$(GOOS) $(GO_TEST) -cover -covermode=atomic -coverpkg=$(GO_PKGROOT) -coverprofile=coverage.out $(GO_PKGROOT)
 	$(GO_TOOL) cover -html=coverage.out -o coverage.html
 
-test-e2e: build ## Run shellspec end-to-end tests against the built binary
-	shellspec --shell sh
-
-test-e2e-atago: ## Run atago end-to-end tests (builds omokage in a HOME sandbox)
+test-e2e: ## Run the atago end-to-end tests (builds omokage in a HOME sandbox)
 	$(GO) run ./e2e/runner
+
+test-e2e-atago: test-e2e ## Alias of test-e2e
 
 coverage: ## Combine unit + atago E2E coverage into coverage.out (needs atago)
 	sh scripts/coverage.sh
@@ -55,11 +54,11 @@ demo: build ## Regenerate the README GIFs from doc/img/*.tape (needs vhs)
 lint: ## Run golangci-lint
 	golangci-lint run --config .golangci.yml
 
-tools: ## Install developer tools (linter, coverage, shellspec for e2e)
+tools: ## Install developer tools (linter, coverage, benchmark, atago for e2e)
 	$(GO_INSTALL) github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 	$(GO_INSTALL) github.com/k1LoW/octocov@latest
 	$(GO_INSTALL) github.com/nao1215/himorime@latest
-	curl -fsSL https://git.io/shellspec | sh -s 0.28.1 --yes
+	$(GO_INSTALL) github.com/nao1215/atago@latest
 
 .DEFAULT_GOAL := help
 help:

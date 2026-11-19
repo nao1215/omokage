@@ -176,3 +176,176 @@ scenarios:
             created: []
             modified: []
             deleted: []
+
+  - name: "init --name records the project name in omokage.toml"
+    steps:
+      - run:
+          command: omokage init --name my-style
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Initialized omokage project."
+      - assert:
+          file:
+            path: omokage.toml
+            contains: my-style
+
+  - name: "list prints every trained author"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage list
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "ja_me"
+              - "en_me"
+
+  - name: "list --long shows the trained time and source columns"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage list --long
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "AUTHOR"
+              - "TRAINED"
+              - "SOURCE"
+              - "me"
+
+  - name: "remove fails for an author that does not exist"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage remove --author ghost
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "profile not found"
+
+  - name: "a renamed profile keeps its data under the new name"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage rename --author me --to watashi
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author watashi
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: watashi"
+
+  - name: "rename refuses to overwrite an existing author"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author other "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage rename --author me --to other
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "already exists"
+
+  # OMOKAGE_HOME points at a per-scenario global store; with no local
+  # omokage.toml a bare check falls back to it and auto-selects the profile.
+  - name: "a global store is initialized and used with no local project"
+    steps:
+      - run:
+          command: omokage init --global
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --global --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: me"
+
+  - name: "a local project takes precedence over the global store"
+    steps:
+      - run:
+          command: omokage init --global
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --global --author global_author "${env:OMOKAGE_TESTDATA}/ja/posts"
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage init
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author local_author "${env:OMOKAGE_TESTDATA}/ja/posts"
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage list
+          env:
+            OMOKAGE_HOME: "${workdir}/home"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "local_author"
+            not_contains: "global_author"

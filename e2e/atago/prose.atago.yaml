@@ -1,0 +1,302 @@
+# What `check` treats as prose and what it learns about notation. Term
+# preferences: train learns per-profile notation preferences, `show --format
+# json` exposes them (including a corpus-declared alias bridge), and `check
+# --format json` flags a draft that uses a non-preferred surface without changing
+# the similarity score. Prose-only extraction: code, diagrams, HTML, front
+# matter, headings, bullets and tables never surface as drifting paragraphs.
+# Run with: make test-e2e-atago
+version: "1"
+
+suite:
+  name: omokage term preferences and prose extraction
+
+scenarios:
+  # --- Term preferences --------------------------------------------------------
+  # The corpus uses DB far more than データベース, and the parenthetical
+  # "データベース（DB）" declares the alias bridge between them.
+  - name: "show --format json reports the bridged term group"
+    steps:
+      - fixture:
+          file: terms/a.md
+          content: |
+            データベース（DB）を使う。DB は速い。DB を使う。DB が良い。
+      - fixture:
+          file: terms/b.md
+          content: |
+            DB を使う。DB が好き。DB を選ぶ。データベースも使う。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author tm terms
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author tm --format json
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"term_preferences"'
+              - '"group_key": "term:db"'
+              - '"preferred_surface": "DB"'
+              - '"normalized_key"'
+              - "データベース"
+
+  - name: "show text output stays a short provenance summary without a term dump"
+    steps:
+      - fixture:
+          file: terms/a.md
+          content: |
+            データベース（DB）を使う。DB は速い。DB を使う。DB が良い。
+      - fixture:
+          file: terms/b.md
+          content: |
+            DB を使う。DB が好き。DB を選ぶ。データベースも使う。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author tm terms
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author tm
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: tm"
+            not_contains:
+              - "term_preferences"
+              - "group_key"
+
+  - name: "check --format json flags a non-preferred surface as a term warning"
+    steps:
+      - fixture:
+          file: terms/a.md
+          content: |
+            データベース（DB）を使う。DB は速い。DB を使う。DB が良い。
+      - fixture:
+          file: terms/b.md
+          content: |
+            DB を使う。DB が好き。DB を選ぶ。データベースも使う。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author tm terms
+      - assert:
+          exit_code: 0
+      - fixture:
+          file: draft.md
+          content: |
+            ＤＢ を整備する。データベースを設計する。
+      - run:
+          command: omokage check --author tm --format json draft.md
+      # The score layer is still present and unaffected.
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"term_warnings"'
+              - '"preferred_surface": "DB"'
+              - '"used_surface"'
+              - '"similarity":'
+
+  - name: "check --format json does not warn when the draft uses the preferred surface"
+    steps:
+      - fixture:
+          file: terms/a.md
+          content: |
+            データベース（DB）を使う。DB は速い。DB を使う。DB が良い。
+      - fixture:
+          file: terms/b.md
+          content: |
+            DB を使う。DB が好き。DB を選ぶ。データベースも使う。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author tm terms
+      - assert:
+          exit_code: 0
+      - fixture:
+          file: clean.md
+          content: |
+            DB を整備する。DB を設計する。
+      - run:
+          command: omokage check --author tm --format json clean.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: '"term_warnings": []'
+
+  - name: "plain check output and exit code are unchanged by the term layer"
+    steps:
+      - fixture:
+          file: terms/a.md
+          content: |
+            データベース（DB）を使う。DB は速い。DB を使う。DB が良い。
+      - fixture:
+          file: terms/b.md
+          content: |
+            DB を使う。DB が好き。DB を選ぶ。データベースも使う。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author tm terms
+      - assert:
+          exit_code: 0
+      - fixture:
+          file: draft.md
+          content: |
+            ＤＢ を整備する。
+      - run:
+          command: omokage check --author tm draft.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Similarity:"
+            not_contains: "term_warnings"
+          stderr:
+            empty: true
+
+  # --- Prose-only extraction ---------------------------------------------------
+  # Prose interleaved with a fenced mermaid diagram that contains a blank line,
+  # an HTML block, and YAML front matter, none of which is prose.
+  - name: "check --explain never reports a diagram, HTML, or front matter as a drifting paragraph"
+    steps:
+      - fixture:
+          file: mixed.md
+          content: |
+            ---
+            title: テスト記事
+            image: images/cover.jpg
+            ---
+      
+            最初の段落です。これは普通の本文であり、敬体で書かれています。
+      
+            ```mermaid
+            flowchart TD
+                subgraph Linter["omokage"]
+      
+                A --> B
+                end
+            ```
+      
+            <p align="center">
+              <img src="images/x.jpg" alt="omokage" width="280">
+            </p>
+      
+            詳しくは [データベース入門](https://example.com/db.html) を参照してください。
+      
+            最後の段落です。これも本文として扱われるべき部分です。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author pm "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author pm --explain mixed.md
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains:
+              - "subgraph"
+              - "flowchart"
+              - "<img"
+              - "align="
+              - "title:"
+              - "images/cover.jpg"
+
+  - name: "check --format json does not leak a link URL into the report"
+    steps:
+      - fixture:
+          file: mixed.md
+          content: |
+            ---
+            title: テスト記事
+            image: images/cover.jpg
+            ---
+      
+            最初の段落です。これは普通の本文であり、敬体で書かれています。
+      
+            ```mermaid
+            flowchart TD
+                subgraph Linter["omokage"]
+      
+                A --> B
+                end
+            ```
+      
+            <p align="center">
+              <img src="images/x.jpg" alt="omokage" width="280">
+            </p>
+      
+            詳しくは [データベース入門](https://example.com/db.html) を参照してください。
+      
+            最後の段落です。これも本文として扱われるべき部分です。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author pm "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author pm --format json mixed.md
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains:
+              - "example.com"
+              - "db.html"
+
+  # A draft whose only prose paragraph drifts into the plain register, preceded
+  # by a heading, a bullet list, and a table that must be ignored.
+  - name: "drift is localized to prose paragraphs, not headings, bullets, or tables"
+    steps:
+      - fixture:
+          file: draft.md
+          content: |
+            # 見出しだけの段落
+      
+            - 箇条書きの項目一
+            - 箇条書きの項目二
+            - 箇条書きの項目三
+      
+            | 列A | 列B |
+            | --- | --- |
+            | 値1 | 値2 |
+      
+            本日は降雨である。外出を実施した。混雑は著しいものであった。状況は変化しない。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author me --format json draft.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"kind": "paragraph"'
+              - "本日は降雨である"
+            not_contains:
+              - "見出しだけ"
+              - "箇条書き"
+              - "列A"

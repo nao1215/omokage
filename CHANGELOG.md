@@ -12,6 +12,7 @@ and per-release binaries and notes are published from git tags by GoReleaser.
 - CI scans the repository with gosec and Trivy on every pull request (Trivy covers dependency vulnerabilities, committed secrets and misconfigurations, and also runs daily). Workflow actions are recorded in `.github/workflows/actions.lock`, which CI verifies against the pinned commits.
 - Dependencies: github.com/ikawaha/kagome/v2 v2.11.1 (kagome-dict v1.1.8), modernc.org/sqlite v1.62.0 (modernc.org/libc v1.82.2), golang.org/x/sys v0.50.0.
 - CI scans pull requests and pushes to main for committed secrets with gitleaks (runs started by Dependabot are skipped), and runs the E2E suite with atago v0.26.3 and the benchmarks with himorime v0.6.1.
+- The end-to-end tests moved from shellspec to atago: every shellspec example is now covered by the atago specs under `e2e/atago/` (fixtures under `e2e/testdata/`), which run on Linux, macOS, and Windows, and `make test-e2e` runs them.
 
 ### Fixed
 

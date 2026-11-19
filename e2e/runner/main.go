@@ -146,6 +146,10 @@ func sandboxEnv(repoRoot, sandbox, binDir string) error {
 		// specs, so they carry no duplicate training data. Absolute, because
 		// atago runs each scenario in its own isolated workdir.
 		"OMOKAGE_EXAMPLES": filepath.Join(repoRoot, "examples"),
+		// The test-only corpora (drafts that keep or lose the voice, a Japanese
+		// and an English set) live next to the specs. Absolute for the same
+		// reason as OMOKAGE_EXAMPLES.
+		"OMOKAGE_TESTDATA": filepath.Join(repoRoot, "e2e", "testdata"),
 
 		"PATH": binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}

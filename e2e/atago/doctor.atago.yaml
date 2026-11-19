@@ -81,3 +81,123 @@ scenarios:
             json:
               path: $.findings[0].action
               matches: "."
+
+  # doctor reads and reports only; it never trains or writes a store, so it
+  # works in a bare directory with no omokage project.
+  - name: "a solid Japanese corpus rates good without a project"
+    steps:
+      - run:
+          command: omokage doctor "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Reliability: good"
+              - "No problems found"
+              - "not writing quality"
+      - assert:
+          file:
+            path: omokage.toml
+            exists: false
+
+  - name: "a thin Japanese corpus rates weak and suggests what to do"
+    steps:
+      - fixture:
+          file: thin/a.md
+          content: |
+            今日は晴れ。散歩した。
+      - fixture:
+          file: thin/b.md
+          content: |
+            本を読んだ。良かった。
+      - run:
+          command: omokage doctor thin
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Reliability: weak"
+              - "Findings:"
+              - "→"
+
+  - name: "--format json on a solid corpus carries reliability, findings and actions"
+    steps:
+      - run:
+          command: omokage doctor --format json "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"reliability"'
+              - '"findings"'
+              - '"action"'
+
+  - name: "doctor without INPUT names the missing argument"
+    steps:
+      - run:
+          command: omokage doctor
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "missing INPUT"
+
+  - name: "doctor rejects an unknown --format"
+    steps:
+      - run:
+          command: omokage doctor --format yaml "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "unknown --format"
+
+  - name: "doctor rejects a URL input like train does"
+    steps:
+      - run:
+          command: omokage doctor https://example.com/post
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "URL inputs are not supported"
+
+  # The corpus-reliability summary prints on stdout (not gated behind a
+  # terminal), so a person, a script, and an LLM all see whether to curate the
+  # corpus. stderr stays clean.
+  - name: "train on a thin corpus reports weak reliability and points at doctor"
+    steps:
+      - fixture:
+          file: thin/a.md
+          content: |
+            今日は晴れ。散歩した。
+      - fixture:
+          file: thin/b.md
+          content: |
+            本を読んだ。良かった。
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author thin thin
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - 'Trained author "thin"'
+              - "Corpus reliability: weak"
+              - "omokage doctor"
+          stderr:
+            empty: true
+
+  - name: "train on a solid corpus reports good reliability without pointing at doctor"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Corpus reliability: good."
+            not_contains: "omokage doctor"

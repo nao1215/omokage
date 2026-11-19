@@ -53,3 +53,46 @@ scenarios:
             contains:
               - "Reference:"
               - "Target:"
+
+  - name: "a Japanese file compared against itself is 100% similar"
+    steps:
+      - run:
+          command: omokage diff "${env:OMOKAGE_TESTDATA}/ja/keep.md" "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Similarity: 100%"
+
+  - name: "a register change lowers the similarity below 100%"
+    steps:
+      - run:
+          command: omokage diff "${env:OMOKAGE_TESTDATA}/ja/keep.md" "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      # One or two digits: anything from 0% to 99%, i.e. below 100%.
+      - assert:
+          exit_code: 0
+          stdout:
+            matches: "Similarity: [0-9]{1,2}%"
+
+  - name: "a missing operand file fails"
+    steps:
+      - run:
+          command: omokage diff "${env:OMOKAGE_TESTDATA}/ja/keep.md" ja/missing.md
+      - assert:
+          exit_code: 1
+          stderr:
+            empty: false
+
+  - name: "two empty files are diffed without crashing"
+    steps:
+      - fixture:
+          file: a.md
+          content: ""
+      - fixture:
+          file: b.md
+          content: ""
+      - run:
+          command: omokage diff a.md b.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Similarity:"

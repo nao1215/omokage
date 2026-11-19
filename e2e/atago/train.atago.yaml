@@ -1,0 +1,242 @@
+# The `train` contract on the bundled Japanese and English corpora
+# (e2e/testdata): what a successful train reports and writes, how inputs are
+# counted (files, directories, duplicates, symlinks), and every way an input is
+# refused, always with exit 1, a named reason on stderr, and no profile left
+# behind. Run with: make test-e2e-atago
+version: "1"
+
+suite:
+  name: omokage train contract
+
+scenarios:
+  - name: "trains a Japanese profile into profiles/AUTHOR.db"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me"'
+      - assert:
+          file:
+            path: profiles/me.db
+            exists: true
+
+  - name: "trains an English profile"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me"'
+
+  - name: "trains from several files passed directly"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/keep.md" "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me" from 2 files'
+      - assert:
+          file:
+            path: profiles/me.db
+            exists: true
+
+  # ja/posts holds 8 files; adding ja/keep.md makes 9.
+  - name: "trains from a directory and a file mixed together"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts" "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me" from 9 files'
+
+  # ja/posts/walk.md is one of the 8 files in ja/posts, so the count stays 8.
+  - name: "does not double-count a file already inside a passed directory"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts" "${env:OMOKAGE_TESTDATA}/ja/posts/walk.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me" from 8 files'
+
+  # alias.md points at keep.md; the same real file must be learned once.
+  # Skipped on Windows, where creating a symlink needs Developer Mode or
+  # an elevated shell.
+  - name: "does not double-count a symlink and its target"
+    skip:
+      os: windows
+    steps:
+      - fixture:
+          file: ja/keep.md
+          from: "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - fixture:
+          file: ja/alias.md
+          symlink: keep.md
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me ja/keep.md ja/alias.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "me" from 1 file'
+
+  - name: "train with --author but no INPUT names the missing argument"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "missing INPUT"
+
+  - name: "a missing file input is named in the error"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me ja/nope.md
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "input not found"
+
+  - name: "a directly passed unsupported file is rejected"
+    steps:
+      - fixture:
+          file: notes.pdf
+          content: |
+            not text
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me notes.pdf
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "unsupported file"
+
+  # A single bad input aborts the whole run: no profile is written, so the
+  # user can drop the named argument and re-run.
+  - name: "a bad input mixed with valid ones stops the run and trains nothing"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts" ja/nope.md
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "input not found: ja/nope.md"
+      - assert:
+          file:
+            path: profiles/me.db
+            exists: false
+
+  - name: "a corpus of only empty files is rejected"
+    steps:
+      - fixture:
+          file: blank/a.md
+          content: ""
+      - fixture:
+          file: blank/b.md
+          content: ""
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me blank
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "no usable text"
+
+  # The project lives in proj/, so the workdir root is the directory a
+  # `../evil` name would escape into; nothing may land there.
+  - name: "an author name containing a path separator is rejected"
+    steps:
+      - fixture:
+          file: proj/.keep
+          content: ""
+      - run:
+          command: omokage init
+          cwd: proj
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ../evil "${env:OMOKAGE_TESTDATA}/ja/posts"
+          cwd: proj
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "path separators"
+      - assert:
+          file:
+            path: evil.db
+            exists: false
+      - assert:
+          file:
+            path: proj/evil.db
+            exists: false
+
+  - name: "trains only from supported extensions in a mixed directory"
+    steps:
+      - fixture:
+          file: mixed/a.md
+          from: "${env:OMOKAGE_TESTDATA}/ja/posts/coffee.md"
+      - fixture:
+          file: mixed/b.json
+          content: |
+            {"not":"prose"}
+      - fixture:
+          file: mixed/c.txt
+          content: |
+            Just a short line of plain text here.
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author mixed mixed
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: 'Trained author "mixed"'
