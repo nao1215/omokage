@@ -11,49 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  shellspec:
-    name: shellspec (binary e2e)
-
-    strategy:
-      matrix:
-        os:
-          - "ubuntu-latest"
-          - "macos-latest"
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "stable"
-
-      # shellspec runs straight from its source tree, so it is checked out at
-      # the commit of its 0.28.1 tag instead of piping the installer to sh.
-      - name: Install shellspec
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: shellspec/shellspec
-          ref: 90e48c950239f3b8a9fdfa3e869592872c77b981 # 0.28.1
-          path: .tools/shellspec
-          persist-credentials: false
-
-      - name: Add shellspec to PATH
-        run: echo "$GITHUB_WORKSPACE/.tools/shellspec" >> "$GITHUB_PATH"
-
-      - name: Build omokage
-        run: make build
-
-      - name: Run shellspec end-to-end tests
-        run: shellspec --shell sh
-
-  # shellspec above stays on the two POSIX systems: it is a shell test runner,
-  # and making it work on Windows would mean testing Git Bash. The atago suite
-  # carries the same binary contract and bootstraps in Go, so it runs everywhere
-  # omokage is built for.
+  # atago bootstraps in Go (e2e/runner), so the suite runs on every system
+  # omokage is built for, Windows included, without a POSIX shell.
   atago:
     name: atago (binary e2e)
 
@@ -82,8 +41,7 @@ jobs:
 
       # The hermetic runner builds omokage and runs the atago suite in a
       # temp-backed HOME/profile-store sandbox, so local and CI execution are
-      # identical. These specs assert the same binary contract the shellspec
-      # suite does, but through atago's declarative state/exit-code/stream
-      # assertions and its combined-coverage instrumentation.
+      # identical. The specs under e2e/atago pin the binary contract through
+      # atago's declarative state/exit-code/stream assertions.
       - name: Run atago end-to-end tests
         run: go run ./e2e/runner

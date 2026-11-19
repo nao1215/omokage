@@ -165,3 +165,474 @@ scenarios:
           exit_code: 0
           stdout:
             contains: "Author: me"
+
+  # --- Japanese and English corpora (e2e/testdata) ---------------------------
+  # The faithful draft scores ~91 and the drifted one 0 against ja_me; the
+  # 50/40 bounds pin keep > lost the way the en scenarios above do.
+  - name: "ja: a faithful draft scores higher than a drifted one"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --format json "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              gt: 50
+      - run:
+          command: omokage check --author ja_me --format json "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              lt: 40
+
+  - name: "ja: check names the register shift in a drifted draft"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "polite sentence-ending ratio is lower than reference"
+
+  - name: "en: a faithful draft scores higher than a different voice"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author en_me --format json "${env:OMOKAGE_TESTDATA}/en/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              gt: 50
+      - run:
+          command: omokage check --author en_me --format json "${env:OMOKAGE_TESTDATA}/en/other.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              lt: 40
+
+  - name: "cross-language: English text scores low against a Japanese profile"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --format json "${env:OMOKAGE_TESTDATA}/en/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              lt: 20
+
+  - name: "cross-language: Japanese text scores low against an English profile"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author en_me --format json "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            json:
+              path: "$.similarity"
+              lt: 20
+
+  # atago captures the streams (not a terminal), so the discoverability tip
+  # must be suppressed entirely: scripts and pipes see only the result.
+  - name: "plain check keeps captured output clean on both streams"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Differences:"
+            not_contains:
+              - "High-level style"
+              - "Tip:"
+          stderr:
+            empty: true
+
+  - name: "--explain omits the tip in the detailed report itself"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --explain "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains: "Tip:"
+          stderr:
+            not_contains: "Tip:"
+
+  - name: "--explain leads with the editable high-level register drift"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --explain "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "High-level style differences"
+              - "polite sentence-ending ratio is lower than reference"
+
+  - name: "--explain localizes register drift to the flipped paragraphs"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --explain "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Paragraphs that drift most:"
+              - "polite sentence-ending ratio lower"
+
+  - name: "--explain does not localize a near-match to a document-global feature"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --explain "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains:
+              - "markdown structure frequency lower"
+              - "paragraph length variance lower"
+
+  - name: "--format json carries the register drift with reference statistics"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --format json "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"author": "ja_me"'
+              - '"similarity":'
+              - '"high_level_drift"'
+              - '"reference_mean"'
+              - '"priority": 1'
+
+  - name: "--format json localizes segments with the corresponding feature"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me --format json "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"segments"'
+              - '"feature": "polite sentence-ending ratio"'
+              - '"category": "register"'
+
+  - name: "an untrained author does not leave a stray profile behind"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ghost "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "profile not found"
+      - run:
+          command: omokage list
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains: "ghost"
+
+  - name: "a missing target file fails"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author ja_me ja/missing.md
+      - assert:
+          exit_code: 1
+          stderr:
+            empty: false
+
+  # With two trained profiles and no default_author, a bare check must not
+  # guess: it reports the candidates and asks for --author.
+  - name: "an ambiguous author lists the candidates instead of guessing"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author ja_me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author en_me "${env:OMOKAGE_TESTDATA}/en/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "multiple profiles"
+              - "ja_me"
+
+  # --- Author resolution -----------------------------------------------------
+  - name: "default_author set by a later train resolves a bare check"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author other --default "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: other"
+
+  - name: "an explicit --author overrides default_author"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author other --default "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author me "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Author: me"
+
+  - name: "a bare check with no trained profile says so"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "no author profiles"
+
+  - name: "--score-only prints only the score, no labels or percent sign"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --score-only "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+          stdout:
+            not_contains:
+              - "Author"
+              - "Similarity"
+              - "%"
+
+  - name: "an empty target file is checked without crashing"
+    steps:
+      - fixture:
+          file: empty.md
+          content: ""
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage check --author me empty.md
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Similarity:"

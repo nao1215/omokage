@@ -1,0 +1,180 @@
+# The help surface: the root help, `version`, per-subcommand help, and
+# `help <command>`. None of these need a project, so every scenario runs the
+# binary in an empty workdir. An explicit --help (or `help <command>`) is a
+# successful request for usage and exits 0 with the usage text on stderr; a real
+# parse error still exits non-zero. Run with: make test-e2e-atago
+version: "1"
+
+suite:
+  name: omokage help surface
+
+scenarios:
+  # --- Root help ---------------------------------------------------------------
+
+  - name: "root: no arguments prints the help and succeeds"
+    steps:
+      - run:
+          command: omokage
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "omokage compares writing style"
+              - "Commands:"
+              - "check"
+
+  - name: "root: --help prints the usage and the commands"
+    steps:
+      - run:
+          command: omokage --help
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Usage:"
+              - "train"
+
+  - name: "root: --help advertises the help command and help <command>"
+    steps:
+      - run:
+          command: omokage --help
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "help"
+              - "omokage help <command>"
+
+  - name: "root: the version subcommand prints the version"
+    steps:
+      - run:
+          command: omokage version
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "omokage"
+
+  # --- <subcommand> --help -----------------------------------------------------
+
+  - name: "check --help describes check and lists its flags with double dashes"
+    steps:
+      - run:
+          command: omokage check --help
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "Score how closely"
+              - "Usage: omokage check"
+              - "--author"
+              - "--explain"
+              - "--format"
+
+  - name: "check --help surfaces the explain and json options"
+    steps:
+      - run:
+          command: omokage check --help
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "prioritized"
+              - "text or json"
+
+  - name: "check --help does not show single-dash flag spellings"
+    steps:
+      - run:
+          command: omokage check --help
+      - assert:
+          exit_code: 0
+          stderr:
+            not_contains: "  -author"
+
+  - name: "init --help describes init with a double-dash flag"
+    steps:
+      - run:
+          command: omokage init --help
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "Usage: omokage init"
+              - "--name"
+
+  - name: "train --help describes train"
+    steps:
+      - run:
+          command: omokage train --help
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "Learn an author"
+              - "--author"
+
+  - name: "an unknown flag exits non-zero (it is not a help request)"
+    steps:
+      - run:
+          command: omokage check --bogus
+      - assert:
+          exit_code: 1
+          stderr:
+            empty: false
+
+  # --- help <subcommand> mirrors <subcommand> --help -------------------------
+
+  - name: "help check routes to check --help"
+    steps:
+      - run:
+          command: omokage help check
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "Score how closely"
+              - "Usage: omokage check"
+              - "--explain"
+
+  - name: "help init routes to init --help"
+    steps:
+      - run:
+          command: omokage help init
+      - assert:
+          exit_code: 0
+          stderr:
+            contains:
+              - "Usage: omokage init"
+              - "--name"
+
+  - name: "bare help still prints the root help"
+    steps:
+      - run:
+          command: omokage help
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "omokage compares writing style"
+              - "Commands:"
+
+  - name: "help for an unknown command fails and shows the commands"
+    steps:
+      - run:
+          command: omokage help frobnicate
+      - assert:
+          exit_code: 1
+          stderr:
+            contains: "unknown command"
+          stdout:
+            contains: "Commands:"
+
+  - name: "help <command> rejects extra arguments instead of dropping them"
+    steps:
+      # `help check extra` must fail like `check extra --help`, not silently
+      # ignore the trailing token.
+      - run:
+          command: omokage help check extra
+      - assert:
+          exit_code: 1
+          stderr:
+            empty: false

@@ -287,3 +287,61 @@ scenarios:
             contains:
               - "multiple profiles"
               - "--author"
+
+  # --- Missing required arguments ----------------------------------------------
+  # Each command prints a direct "missing X" line, not just the usage block.
+  # The validation runs before any store lookup, so these need no project.
+  - name: "usage: check without a FILE names the missing argument"
+    steps:
+      - run:
+          command: omokage check
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "missing FILE"
+              - "Usage: omokage check"
+
+  - name: "usage: train with --author but no input names the missing INPUT"
+    steps:
+      - run:
+          command: omokage train --author me
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "missing INPUT"
+              - "Usage: omokage train"
+
+  - name: "usage: train with an input but no --author names the missing flag, before any lookup"
+    steps:
+      - run:
+          command: omokage train examples/posts
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "missing --author"
+              - "Usage: omokage train"
+
+  - name: "usage: remove without --author names the missing flag"
+    steps:
+      - run:
+          command: omokage remove
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "missing --author"
+              - "Usage: omokage remove"
+
+  - name: "usage: rename with --author but no --to names the missing flag"
+    steps:
+      - run:
+          command: omokage rename --author me
+      - assert:
+          exit_code: 1
+          stderr:
+            contains:
+              - "missing --to"
+              - "Usage: omokage rename"

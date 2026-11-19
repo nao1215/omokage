@@ -12,7 +12,7 @@ import (
 // fixtures are real article bodies (tech, diary, and rewrites) used to assert the
 // topic-masking and robust-aggregation behavior at the command level, against the
 // same paths a user would pass to `train`/`check`.
-const debimateFixtureDir = "../spec/testdata/debimate/ja"
+const debimateFixtureDir = "../e2e/testdata/debimate/ja"
 
 // scoreFixture trains author "me" from the Debimate tech/train corpus once and
 // returns the `check --score-only` score of one fixture file, so a test reads the

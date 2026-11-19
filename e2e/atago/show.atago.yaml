@@ -1,0 +1,124 @@
+# The `show` contract: what a trained profile reports about itself, its
+# provenance (one source or several) and the corpus quality that `doctor` would
+# have found at train time, in the text view and in --format json (with the
+# lighter --summary JSON for handing to an LLM). Run with: make test-e2e-atago
+version: "1"
+
+suite:
+  name: omokage show contract
+
+scenarios:
+  - name: "show reports how a profile was trained"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Author: me"
+              - "Files:"
+              - "Source:"
+
+  - name: "show lists the provenance of several inputs"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts" "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - "Sources (2):"
+              - "keep.md"
+
+  - name: "show --format json exposes several inputs"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts" "${env:OMOKAGE_TESTDATA}/ja/keep.md"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me --format json
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"sources"'
+              - "keep.md"
+
+  - name: "show reports reliability in the text view"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/keep.md" "${env:OMOKAGE_TESTDATA}/ja/lost.md"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me
+      - assert:
+          exit_code: 0
+          stdout:
+            contains: "Reliability:"
+
+  - name: "show --format json keeps the train-time quality findings and term preferences"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me --format json
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"reliability"'
+              - '"quality_findings"'
+              - '"term_preferences"'
+
+  - name: "show --format json --summary omits term_preferences for a lighter JSON"
+    steps:
+      - run:
+          command: omokage init
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage train --author me "${env:OMOKAGE_TESTDATA}/ja/posts"
+      - assert:
+          exit_code: 0
+      - run:
+          command: omokage show --author me --format json --summary
+      - assert:
+          exit_code: 0
+          stdout:
+            contains:
+              - '"reliability"'
+              - '"quality_findings"'
+            not_contains: '"term_preferences"'
