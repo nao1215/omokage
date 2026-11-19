@@ -77,6 +77,37 @@ func TestExtractTextStripsCodeFromEveryFeature(t *testing.T) {
 	}
 }
 
+func TestExtractTextIgnoresALeadingByteOrderMark(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		text string
+	}{
+		{name: "Japanese prose", text: "今日は晴れです。散歩に行きました。\n"},
+		{name: "a heading on the first line", text: "# Title\n\nThis is a sentence. And another one.\n"},
+		{name: "a code fence on the first line", text: "```go\nfunc main() {}\n```\n\n本文です。続きを書きます。\n"},
+		{name: "a bullet on the first line", text: "- first item\n- second item\n\n文です。\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			plain := ExtractText(tt.text)
+			bom := ExtractText(utf8BOM + tt.text)
+			if !reflect.DeepEqual(plain, bom) {
+				t.Fatalf("metrics differ with a byte order mark:\nwithout %+v\nwith    %+v", plain, bom)
+			}
+
+			plainSegments := ExtractSegments(tt.text)
+			bomSegments := ExtractSegments(utf8BOM + tt.text)
+			if !reflect.DeepEqual(plainSegments, bomSegments) {
+				t.Fatalf("segments differ with a byte order mark:\nwithout %+v\nwith    %+v", plainSegments, bomSegments)
+			}
+		})
+	}
+}
+
 func TestStripCodeHandlesBacktickAndTildeFencesAlike(t *testing.T) {
 	t.Parallel()
 

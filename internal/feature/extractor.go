@@ -152,7 +152,7 @@ func ExtractFileWithSegments(path string) (Metrics, []Segment, error) {
 // dense over the prose paragraphs that survive, so a report can name "paragraph
 // #N".
 func ExtractSegments(text string) []Segment {
-	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized := normalizeText(text)
 	// Strip code and HTML on the whole document before splitting into paragraphs.
 	// Splitting first would break a fenced block that contains a blank line (mermaid
 	// diagrams and shell sessions routinely do): each fragment would lose its
@@ -386,7 +386,7 @@ func square(value float64) float64 {
 }
 
 func ExtractText(text string) Metrics {
-	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized := normalizeText(text)
 	// Every feature is measured on the code-stripped prose, not the raw text, so
 	// the score reflects the author's natural-language habits rather than the
 	// shared vocabulary and layout of code samples. Authorship features (function
