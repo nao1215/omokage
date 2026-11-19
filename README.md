@@ -233,6 +233,7 @@ omokage (面影) is written with 面 (face) and 影 (shadow, trace): the remembe
 | [Property-based tests](internal/profile/property_test.go) | Scores outside 0-100 and a draft that does not match itself |
 | [Metamorphic tests](internal/profile/property_test.go) | Profiles that depend on the order of the corpus, and metrics moved by CRLF or a byte order mark |
 | [Fuzzing](internal/feature/extractor_test.go) | Panics on malformed Markdown, configuration and terms |
+| [Mutation testing](.github/workflows/mutation.yml) | Tests that run changed code without checking its result |
 | [Benchmarks](bench) | Slower `train` and `check` on large corpora |
 
 The commands, files and CI jobs for each are in [doc/testing.md](doc/testing.md).
