@@ -25,12 +25,7 @@ omokage learns how you write from your past writing, then scores how close a new
 
 ![demo](./doc/img/demo.gif)
 
-## What it does (and doesn't)
-
-- Compares style — sentence shape, register (敬体 / 常体), kanji/kana balance, word and character patterns — between a draft and a trained author, and points out where they differ.
-- Does not judge meaning, correctness, originality, or quality. It is not an AI-text detector. A high score means only "this reads like the voice you trained."
-
-It is built for an LLM as much as for a person: an agent can run `check` after each rewrite, read the differences, and revise until the draft sits closer to the voice.
+omokage compares sentence shape, register (敬体 / 常体), kanji/kana balance, and word and character patterns between a draft and a trained author, and lists where they differ. A high score means the draft reads like the voice you trained; it says nothing about meaning, correctness, or quality. An LLM agent can run `check` after each rewrite and revise until the draft gets closer.
 
 ## Install
 
@@ -45,40 +40,6 @@ yay -S omokage-bin   # or: paru -S omokage-bin
 ```
 
 Runs on Windows, macOS, and Linux. Building from source needs Go 1.26.6 or later.
-
-## Verifying release integrity
-
-Releases from v0.6.3 on ship supply-chain metadata so you can verify what you download:
-
-- Signed checksums: `checksums.txt` is signed with [cosign](https://github.com/sigstore/cosign) (keyless), producing `checksums.txt.sigstore.json`.
-- SBOM: an SPDX Software Bill of Materials is attached to each release archive as `<archive>.sbom.json`.
-- Build provenance: SLSA build provenance is attested via GitHub OIDC, and is also attached to the release as `multiple.intoto.jsonl`.
-
-Verify the signed checksums (then check your archive against `checksums.txt`):
-
-```shell
-cosign verify-blob \
-  --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/nao1215/omokage/\.github/workflows/release\.yml@refs/tags/.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  checksums.txt
-sha256sum --check --ignore-missing checksums.txt
-```
-
-Verify the build provenance of a downloaded artifact with the GitHub CLI:
-
-```shell
-gh attestation verify omokage_<version>_<os>_<arch>.tar.gz --repo nao1215/omokage
-```
-
-Or download the `multiple.intoto.jsonl` release asset and verify the archive against it with [slsa-verifier](https://github.com/slsa-framework/slsa-verifier), which checks the provenance signature against the Sigstore transparency log:
-
-```shell
-slsa-verifier verify-artifact omokage_<version>_<os>_<arch>.tar.gz \
-  --provenance-path multiple.intoto.jsonl \
-  --source-uri github.com/nao1215/omokage \
-  --source-tag v<version>
-```
 
 ## Quick start
 
@@ -101,7 +62,7 @@ Differences:
 - character n-gram "ht" is higher than reference
 ```
 
-`train` takes any mix of directories (scanned for `.md`/`.txt`) and individual files; a file reached twice is learned once. It reads local files only — a URL, a missing path, or an unsupported extension stops the run by name and trains nothing.
+`train` takes any mix of directories (scanned for `.md`/`.txt`) and individual files; a file reached twice is learned once. It reads local files only: a URL, a missing path, or an unsupported extension stops the run with its name, and nothing is trained.
 
 The same idea rewritten in a stiff, formal voice scores low:
 
@@ -120,7 +81,7 @@ Differences:
 
 ## Checking a corpus
 
-Scores are only as steady as the corpus behind them. A good corpus is several documents (aim for eight or more), each a few paragraphs long, all in one consistent voice. `doctor` rates a corpus — training and writing nothing — and names what to fix:
+Aim for eight or more documents, each a few paragraphs long, in one voice. `doctor` rates a corpus without training or writing anything, and names what to fix:
 
 ```shell
 $ omokage doctor ~/writing/posts
@@ -149,11 +110,11 @@ These checks look at sample size and consistency, not writing quality.
 
 ![doctor demo](./doc/img/doctor.gif)
 
-`doctor --format json` returns the same report as data. `train` prints the reliability too, and `show --format json` stores the rating and findings so you can inspect a profile later. A mixed corpus is usually flagged by the feature it disagrees on, often the register or kanji/kana balance; the fix is to split it into one profile per voice.
+`doctor --format json` returns the same report as data. `train` prints the reliability too, and `show --format json` shows the stored rating and findings later. A corpus that mixes voices is usually flagged on register or kanji/kana balance; split it into one profile per voice.
 
 ## Choosing the author
 
-`--author` is just a profile name; it need not be a person. Name a profile for a purpose — `--author blog`, `--author docs` — and train each on the writing that belongs to it. `check` and `show` resolve the author as: `--author` if given, else `default_author`, else the only profile, else an error (they never silently pick one). Set a default with `train --author me --default ...`.
+`--author` is a profile name, so it can be a purpose such as `--author blog` or `--author docs`. `check` and `show` use `--author` if given, else `default_author`, else the only profile, and otherwise fail instead of picking one. Set a default with `train --author me --default ...`.
 
 ## Output modes
 
@@ -166,7 +127,7 @@ These checks look at sample size and consistency, not writing quality.
 | `--explain` | per-feature drift (value, mean ± spread, z-score) + the paragraphs that drift most | final by-hand tuning |
 | `--format json` | the `--explain` detail as JSON, plus `term_warnings` | an LLM or tool reading between rewrites |
 
-`--explain` and `--format json` split the draft into paragraphs, so they are opt-in and plain `check` stays fast. `--score-only` can't be combined with them.
+`--explain` and `--format json` split the draft into paragraphs, which is slower, so plain `check` skips that. `--score-only` can't be combined with them.
 
 ```shell
 $ score=$(omokage check --score-only draft.md)
@@ -192,11 +153,11 @@ Paragraphs that drift most:
 
 ## Using omokage with an LLM
 
-Train once, then have the agent run `check --format json` after each rewrite. The JSON leads with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag; `segments` points at the paragraphs that drift most, `segment_style_drift` summarizes how far a typical paragraph strays (the median per-paragraph drift, reported for insight only — it never affects the score), and `term_warnings` flags notation that differs from your learned preference. For a lighter payload, `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. omokage tells the agent how close the draft sits to your voice and where it strays, not whether it is correct or good, so keep a human in the loop.
+Train once, then have the agent run `check --format json` after each rewrite. The JSON starts with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag. `segments` points at the paragraphs that drift most, `segment_style_drift` is the median per-paragraph drift (informational; it does not affect the score), and `term_warnings` flags notation that differs from your learned preference. `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. The score says nothing about whether the draft is correct, so keep a human in the loop.
 
 ## Term preferences
 
-`train` also learns which surface form you use for a recurring term (`DB` vs `データベース`, `HTTP` vs `http`), stored in the same per-author database — no LLM, no network, no dictionary, and only surfaces and counts are kept, never the text. A `normalized_key` folds case and full/half-width ASCII so `DB`, `db`, and `ＤＢ` share a key; a `group_key` merges a Japanese phrase with its acronym only when the corpus declares the bridge (`データベース（DB）`). `show --format json` lists them under `term_preferences`, and `check --format json` adds `term_warnings`; both appear only in JSON, so plain `check` is unchanged.
+`train` also learns which surface form you use for a recurring term (`DB` vs `データベース`, `HTTP` vs `http`), stored in the same per-author database. It uses no LLM, network, or dictionary, and keeps only surfaces and counts. A `normalized_key` folds case and full/half-width ASCII so `DB`, `db`, and `ＤＢ` share a key; a `group_key` merges a Japanese phrase with its acronym only when the corpus declares the bridge (`データベース（DB）`). `show --format json` lists them under `term_preferences`, and `check --format json` adds `term_warnings`; both appear only in JSON, so plain `check` is unchanged.
 
 ## Managing profiles and stores
 
@@ -211,17 +172,47 @@ By default omokage finds an `omokage.toml` by walking up from the current direct
 
 ## How it scores
 
-Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores only the numbers, never the text. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta: the function-word and n-gram fingerprint carries most of the signal, a clear register shift is penalized on top, and shape only nudges. The final 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means "close to this author's own typical variation" rather than "three sigmas from the mean." Profiles trained before this baseline was added still work, but retraining is recommended so the calibrated score and self-similarity anchor are available. Code blocks are stripped first, so the score reflects prose.
+Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores the numbers and the surface forms of recurring terms, never the text itself. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta. The function-word and n-gram fingerprint carries most of the signal, a clear register shift adds a penalty, and shape has a small effect. The 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means close to this author's own typical variation. Older profiles without that baseline still work; retrain them to get the calibrated score and self-similarity anchor. Code blocks are stripped first, so the score reflects prose.
 
-For Japanese, which has no spaces between words, these features use morphological analysis (kagome) rather than whitespace tokenization: the function-word fingerprint counts particles and auxiliaries as whole morphemes (not substrings), the register is read from each sentence's closing predicate, and conjunction frequency uses a real morpheme denominator. On a held-out author-attribution test this raised accuracy over the previous heuristics. Two further Japanese signals — a part-of-speech n-gram fingerprint and lemma-based vocabulary richness — are available but off by default (`pos_ngram_frequency`, `type_token_ratio` in the config), since on that test they did not help.
+Japanese has no spaces between words, so these features use morphological analysis (kagome). The function-word fingerprint counts particles and auxiliaries as whole morphemes, the register is read from each sentence's closing predicate, and conjunction frequency is divided by the morpheme count. This scored better on a held-out author-attribution test than simpler heuristics. A part-of-speech n-gram fingerprint and lemma-based vocabulary richness (`pos_ngram_frequency`, `type_token_ratio` in the config) are off by default because they did not help on that test.
 
 ## Limits
 
-omokage looks at style, not meaning: it cannot tell whether a draft is correct, original, or well written, only whether it resembles the voice it was trained on. It needs a reasonable amount of text — with a few short documents the spread is wide and scores are noisy, which `doctor` and the `reliability` rating flag (they measure sample adequacy, not writing quality). It separates Japanese authors more sharply than English ones, and two people who write in the same register look more alike than they are. It is not an AI-text detector.
+With only a few short documents the spread is wide and scores are noisy; `doctor` and the `reliability` rating flag this. omokage separates Japanese authors more sharply than English ones, and two people who write in the same register look more alike than they are. It is not an AI-text detector.
 
 ## About the name
 
 omokage (面影) is written with 面 (face) and 影 (shadow, trace): the remembered image of someone, the likeness that comes back to mind. The name is borrowed from [Omokage](https://www.toraya-group.co.jp/products/collections/yokan-omokage), a yokan by Toraya that I like.
+
+## Verifying release integrity
+
+From v0.6.3 on, `checksums.txt` is signed with [cosign](https://github.com/sigstore/cosign) (keyless) as `checksums.txt.sigstore.json`, each archive has an SPDX SBOM as `<archive>.sbom.json`, and SLSA build provenance is attested via GitHub OIDC and attached as `multiple.intoto.jsonl`.
+
+Verify the signed checksums, then check your archive against `checksums.txt`:
+
+```shell
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/nao1215/omokage/\.github/workflows/release\.yml@refs/tags/.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  checksums.txt
+grep ' omokage_<version>_<os>_<arch>.tar.gz$' checksums.txt | sha256sum --check
+```
+
+Verify the build provenance with the GitHub CLI:
+
+```shell
+gh attestation verify omokage_<version>_<os>_<arch>.tar.gz --repo nao1215/omokage
+```
+
+Or verify the archive against `multiple.intoto.jsonl` with [slsa-verifier](https://github.com/slsa-framework/slsa-verifier), which checks the signature against the Sigstore transparency log:
+
+```shell
+slsa-verifier verify-artifact omokage_<version>_<os>_<arch>.tar.gz \
+  --provenance-path multiple.intoto.jsonl \
+  --source-uri github.com/nao1215/omokage \
+  --source-tag v<version>
+```
 
 ## Testing
 
