@@ -172,7 +172,7 @@ By default omokage finds an `omokage.toml` by walking up from the current direct
 
 ## How it scores
 
-Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores only the numbers, never the text. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta. The function-word and n-gram fingerprint carries most of the signal, a clear register shift adds a penalty, and shape has a small effect. The 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means close to this author's own typical variation. Older profiles without that baseline still work; retrain them to get the calibrated score and self-similarity anchor. Code blocks are stripped first, so the score reflects prose.
+Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores the numbers and the surface forms of recurring terms, never the text itself. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta. The function-word and n-gram fingerprint carries most of the signal, a clear register shift adds a penalty, and shape has a small effect. The 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means close to this author's own typical variation. Older profiles without that baseline still work; retrain them to get the calibrated score and self-similarity anchor. Code blocks are stripped first, so the score reflects prose.
 
 Japanese has no spaces between words, so these features use morphological analysis (kagome). The function-word fingerprint counts particles and auxiliaries as whole morphemes, the register is read from each sentence's closing predicate, and conjunction frequency is divided by the morpheme count. This scored better on a held-out author-attribution test than simpler heuristics. A part-of-speech n-gram fingerprint and lemma-based vocabulary richness (`pos_ngram_frequency`, `type_token_ratio` in the config) are off by default because they did not help on that test.
 
@@ -196,7 +196,7 @@ cosign verify-blob \
   --certificate-identity-regexp 'https://github.com/nao1215/omokage/\.github/workflows/release\.yml@refs/tags/.*' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   checksums.txt
-sha256sum --check --ignore-missing checksums.txt
+grep ' omokage_<version>_<os>_<arch>.tar.gz$' checksums.txt | sha256sum --check
 ```
 
 Verify the build provenance with the GitHub CLI:
