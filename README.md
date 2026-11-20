@@ -25,7 +25,7 @@ omokage learns how you write from your past writing, then scores how close a new
 
 ![demo](./doc/img/demo.gif)
 
-omokage compares sentence shape, register (敬体 / 常体), kanji/kana balance, and word and character patterns between a draft and a trained author, and lists where they differ. A high score means the draft reads like the voice you trained; it says nothing about meaning, correctness, or quality. An LLM agent can run `check` after each rewrite and revise until the draft gets closer.
+A high score means the draft reads like the voice you trained. It says nothing about meaning, correctness, or quality.
 
 ## Install
 
@@ -62,7 +62,7 @@ Differences:
 - character n-gram "ht" is higher than reference
 ```
 
-`train` takes any mix of directories (scanned for `.md`/`.txt`) and individual files; a file reached twice is learned once. It reads local files only: a URL, a missing path, or an unsupported extension stops the run with its name, and nothing is trained.
+`train` takes directories (scanned for `.md`/`.txt`) and files, and reads local files only. A URL, a missing path, or an unsupported extension stops the run before anything is trained.
 
 The same idea rewritten in a stiff, formal voice scores low:
 
@@ -81,17 +81,7 @@ Differences:
 
 ## Checking a corpus
 
-Aim for eight or more documents, each a few paragraphs long, in one voice. `doctor` rates a corpus without training or writing anything, and names what to fix:
-
-```shell
-$ omokage doctor ~/writing/posts
-Corpus: 8 documents, 142 sentences, 5210 characters (avg 651 per document)
-Reliability: good
-
-No problems found: enough material, a consistent voice, and no obvious outliers.
-
-These checks look at sample size and consistency, not writing quality.
-```
+Aim for eight or more documents, each a few paragraphs long, in one voice. `doctor` rates a corpus without training and names what to fix:
 
 ```shell
 $ omokage doctor ~/drafts
@@ -110,15 +100,13 @@ These checks look at sample size and consistency, not writing quality.
 
 ![doctor demo](./doc/img/doctor.gif)
 
-`doctor --format json` returns the same report as data. `train` prints the reliability too, and `show --format json` shows the stored rating and findings later. A corpus that mixes voices is usually flagged on register or kanji/kana balance; split it into one profile per voice.
+`doctor --format json` returns the same report as data, and `train` prints the rating too. If a corpus mixes voices, split it into one profile per voice.
 
 ## Choosing the author
 
-`--author` is a profile name, so it can be a purpose such as `--author blog` or `--author docs`. `check` and `show` use `--author` if given, else `default_author`, else the only profile, and otherwise fail instead of picking one. Set a default with `train --author me --default ...`.
+`--author` is a profile name, so it can name a purpose (`--author blog`). Without it, `check` and `show` use `default_author`, then the only profile, and otherwise fail. Set a default with `train --author me --default ...`.
 
 ## Output modes
-
-`check` reads one file; pick how you want the result:
 
 | Mode | Output | For |
 | --- | --- | --- |
@@ -127,7 +115,7 @@ These checks look at sample size and consistency, not writing quality.
 | `--explain` | per-feature drift (value, mean ± spread, z-score) + the paragraphs that drift most | final by-hand tuning |
 | `--format json` | the `--explain` detail as JSON, plus `term_warnings` | an LLM or tool reading between rewrites |
 
-`--explain` and `--format json` split the draft into paragraphs, which is slower, so plain `check` skips that. `--score-only` can't be combined with them.
+`--explain` and `--format json` are slower because they score each paragraph. `--score-only` can't be combined with them.
 
 ```shell
 $ score=$(omokage check --score-only draft.md)
@@ -153,11 +141,9 @@ Paragraphs that drift most:
 
 ## Using omokage with an LLM
 
-Train once, then have the agent run `check --format json` after each rewrite. The JSON starts with `high_level_drift`, the editable features, each with a `priority` and `actionable` flag. `segments` points at the paragraphs that drift most, `segment_style_drift` is the median per-paragraph drift (informational; it does not affect the score), and `term_warnings` flags notation that differs from your learned preference. `show --author me --format json --summary` returns provenance and the quality rating without the often large term list. The score says nothing about whether the draft is correct, so keep a human in the loop.
+Have the agent run `check --format json` after each rewrite and revise until the score rises. `high_level_drift` lists the features to edit, each with a `priority` and an `actionable` flag, and `segments` points at the paragraphs that drift most. `segment_style_drift` is informational and does not affect the score.
 
-## Term preferences
-
-`train` also learns which surface form you use for a recurring term (`DB` vs `データベース`, `HTTP` vs `http`), stored in the same per-author database. It uses no LLM, network, or dictionary, and keeps only surfaces and counts. A `normalized_key` folds case and full/half-width ASCII so `DB`, `db`, and `ＤＢ` share a key; a `group_key` merges a Japanese phrase with its acronym only when the corpus declares the bridge (`データベース（DB）`). `show --format json` lists them under `term_preferences`, and `check --format json` adds `term_warnings`; both appear only in JSON, so plain `check` is unchanged.
+`train` also learns which form you use for a recurring term (`DB` or `データベース`, `HTTP` or `http`). Case and full/half-width ASCII are folded, so `DB`, `db`, and `ＤＢ` count as one term, and a Japanese phrase joins its acronym only when the corpus writes both (`データベース（DB）`). The JSON output of `check` flags other forms under `term_warnings`; `show --format json` lists the learned ones under `term_preferences`, and `--summary` leaves them out.
 
 ## Managing profiles and stores
 
@@ -168,17 +154,13 @@ $ omokage rename --author me --to watashi
 $ omokage remove --author watashi
 ```
 
-By default omokage finds an `omokage.toml` by walking up from the current directory (a project-local store). `omokage init --global` makes a per-user store under `$OMOKAGE_HOME` (or your user config dir) that any directory falls back to; a local project always wins inside its tree. `--config PATH` / `--profile-dir PATH` point at a specific store.
+omokage uses the nearest `omokage.toml` above the current directory. `omokage init --global` makes a per-user store under `$OMOKAGE_HOME` (or your user config dir) for directories without one. `--config PATH` / `--profile-dir PATH` point at a specific store.
 
 ## How it scores
 
-Training measures a set of stylistic features per document and stores their mean and spread in a SQLite database under `profiles/`, one per author. It stores the numbers and the surface forms of recurring terms, never the text itself. The features are register (敬体 / 常体), script balance (kanji/hiragana/katakana), function words, character n-grams, and shape (sentence and paragraph length, punctuation, layout). A check measures the same features on the draft and scores each by how far it strays from your usual range, as a z-score in the spirit of Burrows's Delta. The function-word and n-gram fingerprint carries most of the signal, a clear register shift adds a penalty, and shape has a small effect. The 0-100 score is calibrated against the profile's leave-one-out self-similarity baseline, so "90%" means close to this author's own typical variation. Older profiles without that baseline still work; retrain them to get the calibrated score and self-similarity anchor. Code blocks are stripped first, so the score reflects prose.
+Training stores the mean and spread of each feature in a SQLite database under `profiles/`, one per author, plus the surface forms of recurring terms; it does not store the documents. The features are register (敬体 / 常体), kanji/hiragana/katakana balance, function words, character n-grams, and sentence and paragraph shape. A check scores how far the draft strays from that range, as z-scores in the spirit of Burrows's Delta; the function-word and n-gram fingerprint carries most of the weight. The 0-100 score is calibrated against the profile's leave-one-out self-similarity, so retrain older profiles to get it. Code blocks are stripped first. Japanese text is split into morphemes with kagome. `pos_ngram_frequency` and `type_token_ratio` are off by default because they did not help on a held-out author-attribution test.
 
-Japanese has no spaces between words, so these features use morphological analysis (kagome). The function-word fingerprint counts particles and auxiliaries as whole morphemes, the register is read from each sentence's closing predicate, and conjunction frequency is divided by the morpheme count. This scored better on a held-out author-attribution test than simpler heuristics. A part-of-speech n-gram fingerprint and lemma-based vocabulary richness (`pos_ngram_frequency`, `type_token_ratio` in the config) are off by default because they did not help on that test.
-
-## Limits
-
-With only a few short documents the spread is wide and scores are noisy; `doctor` and the `reliability` rating flag this. omokage separates Japanese authors more sharply than English ones, and two people who write in the same register look more alike than they are. It is not an AI-text detector.
+Few short documents give noisy scores. Japanese authors separate more sharply than English ones, and two people who write in the same register look more alike than they are. omokage is not an AI-text detector.
 
 ## About the name
 
@@ -186,9 +168,7 @@ omokage (面影) is written with 面 (face) and 影 (shadow, trace): the remembe
 
 ## Verifying release integrity
 
-From v0.6.3 on, `checksums.txt` is signed with [cosign](https://github.com/sigstore/cosign) (keyless) as `checksums.txt.sigstore.json`, each archive has an SPDX SBOM as `<archive>.sbom.json`, and SLSA build provenance is attested via GitHub OIDC and attached as `multiple.intoto.jsonl`.
-
-Verify the signed checksums, then check your archive against `checksums.txt`:
+From v0.6.3 on, releases include a keyless [cosign](https://github.com/sigstore/cosign) signature of `checksums.txt` (`checksums.txt.sigstore.json`), an SPDX SBOM per archive (`<archive>.sbom.json`), and SLSA provenance (`multiple.intoto.jsonl`).
 
 ```shell
 cosign verify-blob \
@@ -199,13 +179,11 @@ cosign verify-blob \
 grep ' omokage_<version>_<os>_<arch>.tar.gz$' checksums.txt | sha256sum --check
 ```
 
-Verify the build provenance with the GitHub CLI:
+Check the provenance with the GitHub CLI or [slsa-verifier](https://github.com/slsa-framework/slsa-verifier):
 
 ```shell
 gh attestation verify omokage_<version>_<os>_<arch>.tar.gz --repo nao1215/omokage
 ```
-
-Or verify the archive against `multiple.intoto.jsonl` with [slsa-verifier](https://github.com/slsa-framework/slsa-verifier), which checks the signature against the Sigstore transparency log:
 
 ```shell
 slsa-verifier verify-artifact omokage_<version>_<os>_<arch>.tar.gz \
@@ -216,18 +194,7 @@ slsa-verifier verify-artifact omokage_<version>_<os>_<arch>.tar.gz \
 
 ## Testing
 
-| Technique | Bug class caught here |
-|---|---|
-| [Unit tests](internal) | Wrong features, scores and storage of each package on Linux, macOS and Windows |
-| [End-to-end tests](e2e/atago) | Changed output, errors and exit codes of the real `omokage` binary |
-| [Regression corpus](cmd/debimate_regression_test.go) | Real blog posts whose genre, topic and voice the score stops telling apart |
-| [Property-based tests](internal/profile/property_test.go) | Scores outside 0-100 and a draft that does not match itself |
-| [Metamorphic tests](internal/profile/property_test.go) | Profiles that depend on the order of the corpus, and metrics moved by CRLF or a byte order mark |
-| [Fuzzing](internal/feature/extractor_test.go) | Panics on malformed Markdown, configuration and terms |
-| [Mutation testing](.github/workflows/mutation.yml) | Tests that run changed code without checking its result |
-| [Benchmarks](bench) | Slower `train` and `check` on large corpora |
-
-The commands, files and CI jobs for each are in [doc/testing.md](doc/testing.md).
+Unit, end-to-end, regression, property-based, metamorphic, fuzz, and mutation tests plus benchmarks are described in [doc/testing.md](doc/testing.md).
 
 ## Contributors ✨
 
